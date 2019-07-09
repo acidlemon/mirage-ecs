@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -12,30 +12,19 @@ import (
 var app *Mirage
 
 type Mirage struct {
-	Config       *Config
-	WebApi       *WebApi
-	ReverseProxy *ReverseProxy
-	Docker       *Docker
-	Storage      *MirageStorage
+	Config  *Config
+	WebApi  *WebApi
+	Docker  *Docker
+	Storage *MirageStorage
 }
 
 func Setup(cfg *Config) {
 	ms := NewMirageStorage(cfg)
 	m := &Mirage{
-		Config:       cfg,
-		WebApi:       NewWebApi(cfg),
-		ReverseProxy: NewReverseProxy(cfg),
-		Docker:       NewDocker(cfg, ms),
-		Storage:      ms,
-	}
-
-	infolist, err := m.Docker.List()
-	if err != nil {
-		fmt.Println("cannot initialize reverse proxy: ", err.Error())
-	}
-
-	for _, info := range infolist {
-		m.ReverseProxy.AddSubdomain(info.SubDomain, info.IPAddress)
+		Config:  cfg,
+		WebApi:  NewWebApi(cfg),
+		Docker:  NewDocker(cfg, ms),
+		Storage: ms,
 	}
 
 	app = m
@@ -51,7 +40,7 @@ func Run() {
 			laddr := fmt.Sprintf("%s:%d", app.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				fmt.Println("cannot listen %s", laddr)
+				log.Printf("cannot listen %s", laddr)
 				return
 			}
 
@@ -77,37 +66,10 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 	case m.isWebApiHost(host):
 		m.WebApi.ServeHTTP(w, req)
 
-	case m.isDockerHost(host):
-		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
-
 	default:
 		// return 404
 		http.NotFound(w, req)
 	}
-
-}
-
-func (m *Mirage) isDockerHost(host string) bool {
-	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
-		ms := m.Storage
-		subdomainList, err := ms.GetSubdomainList()
-		if err != nil {
-			return false
-		}
-
-		subdomain := strings.ToLower(strings.Split(host, ".")[0])
-		sortedList := sort.StringSlice(subdomainList)
-		sortedList.Sort()
-		index := sortedList.Search(subdomain)
-		if index < len(sortedList) && sortedList[index] == subdomain {
-			// found
-			return true
-		}
-
-		return false
-	}
-
-	return false
 }
 
 func (m *Mirage) isWebApiHost(host string) bool {

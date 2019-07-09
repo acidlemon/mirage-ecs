@@ -115,7 +115,6 @@ func (d *Docker) Launch(subdomain string, image string, name string, option map[
 	}
 
 	ms.AddToSubdomainMap(subdomain)
-	app.ReverseProxy.AddSubdomain(subdomain, container.NetworkSettings.IPAddress)
 
 	return nil
 }
@@ -193,7 +192,6 @@ func (d *Docker) Terminate(subdomain string) error {
 	}
 
 	ms.RemoveFromSubdomainMap(subdomain)
-	app.ReverseProxy.RemoveSubdomain(subdomain)
 
 	return nil
 }
