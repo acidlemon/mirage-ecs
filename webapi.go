@@ -21,7 +21,7 @@ func NewWebApi(cfg *Config) *WebApi {
 	app.cfg = cfg
 
 	view := &rocket.View{
-		BasicTemplates: []string{cfg.Storage.HtmlDir + "/layout.html"},
+		BasicTemplates: []string{cfg.HtmlDir + "/layout.html"},
 	}
 
 	app.AddRoute("/", app.List, view)
@@ -53,11 +53,11 @@ func (api *WebApi) List(c rocket.CtxData) {
 		"error": errStr,
 	}
 
-	c.Render(api.cfg.Storage.HtmlDir+"/list.html", value)
+	c.Render(api.cfg.HtmlDir+"/list.html", value)
 }
 
 func (api *WebApi) Launcher(c rocket.CtxData) {
-	c.Render(api.cfg.Storage.HtmlDir+"/launcher.html", rocket.RenderVars{
+	c.Render(api.cfg.HtmlDir+"/launcher.html", rocket.RenderVars{
 		"DefaultTaskDefinition": api.cfg.ECS.DefaultTaskDefinition,
 		"Parameters":            api.cfg.Parameter,
 	})

@@ -6,17 +6,15 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/fsouza/go-dockerclient"
 	config "github.com/kayac/go-config"
 )
 
 type Config struct {
-	Host      Host       `yaml:"host"`
-	Listen    Listen     `yaml:"listen"`
-	Docker    DockerCfg  `yaml:"docker"`
-	Storage   StorageCfg `yaml:"storage"`
-	Parameter Paramters  `yaml:"parameters"`
-	ECS       ECSCfg     `yaml:"ecs"`
+	Host      Host      `yaml:"host"`
+	Listen    Listen    `yaml:"listen"`
+	HtmlDir   string    `yaml:"htmldir"`
+	Parameter Paramters `yaml:"parameters"`
+	ECS       ECSCfg    `yaml:"ecs"`
 }
 
 type ECSCfg struct {
@@ -53,18 +51,6 @@ type PortMap struct {
 	TargetPort int `yaml:"target"`
 }
 
-type DockerCfg struct {
-	Endpoint     string             `yaml:"endpoint"`
-	DefaultImage string             `yaml:"default_image"`
-	HostConfig   *docker.HostConfig `yaml:"host_config"` // TODO depending docker.HostConfig is so risky?
-
-}
-
-type StorageCfg struct {
-	DataDir string `yaml:"datadir"`
-	HtmlDir string `yaml:"htmldir"`
-}
-
 type Parameter struct {
 	Name     string `yaml:"name"`
 	Env      string `yaml:"env"`
@@ -87,14 +73,7 @@ func NewConfig(path string) *Config {
 			HTTP:           []PortMap{},
 			HTTPS:          []PortMap{},
 		},
-		Docker: DockerCfg{
-			Endpoint:     "unix:///var/run/docker.sock",
-			DefaultImage: "",
-		},
-		Storage: StorageCfg{
-			DataDir: "./data",
-			HtmlDir: "./html",
-		},
+		HtmlDir: "./html",
 	}
 
 	err := config.LoadWithEnv(&cfg, path)

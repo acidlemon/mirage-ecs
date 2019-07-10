@@ -86,7 +86,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
 		handlers[v.ListenPort] = handler
 	}
 
-	log.Println("add subdomain: ", subdomain)
+	log.Printf("add subdomain: %s -> %s", subdomain, ipaddress)
 
 	// add to map
 	r.mu.Lock()
@@ -100,6 +100,6 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Println("remove subdomain: ", subdomain)
+	log.Println("remove subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
 }
