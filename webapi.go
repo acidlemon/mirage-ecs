@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
+	"time"
 
 	"gopkg.in/acidlemon/rocket.v2"
 )
@@ -164,8 +166,8 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	subdomain, _ := c.ParamSingle("subdomain")
-	//	since, _ := c.ParamSingle("since")
-	//	tail, _ := c.ParamSingle("tail")
+	since, _ := c.ParamSingle("since")
+	tail, _ := c.ParamSingle("tail")
 
 	if subdomain == "" {
 		return rocket.RenderVars{
@@ -173,15 +175,37 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 		}
 	}
 
-	/*	logs, err := app.ECS.Logs(subdomain, since, tail)
+	var sinceTime time.Time
+	if since != "" {
+		var err error
+		sinceTime, err = time.Parse(time.RFC3339, since)
 		if err != nil {
 			return rocket.RenderVars{
-				"result": err.Error(),
+				"result": fmt.Sprintf("cannot parse since: %s", err),
 			}
 		}
-	*/
+	}
+	var tailN int
+	if tail != "" {
+		if tail == "all" {
+			tailN = 0
+		} else if n, err := strconv.Atoi(tail); err != nil {
+			return rocket.RenderVars{
+				"result": fmt.Sprintf("cannot parse tail: %s", err),
+			}
+		} else {
+			tailN = n
+		}
+	}
+
+	logs, err := app.ECS.Logs(subdomain, sinceTime, tailN)
+	if err != nil {
+		return rocket.RenderVars{
+			"result": err.Error(),
+		}
+	}
 	return rocket.RenderVars{
-	//		"result": logs,
+		"result": logs,
 	}
 }
 

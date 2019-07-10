@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
 )
@@ -22,6 +23,7 @@ type Information struct {
 	IPAddress  string    `json:"ipaddress"`
 	Created    time.Time `json:"created"`
 	LastStatus string    `json:"last_status"`
+	task       *ecs.Task `json:"-"`
 }
 
 const (
@@ -32,9 +34,10 @@ const (
 )
 
 type ECS struct {
-	cfg     *Config
-	Storage *MirageStorage
-	Client  *ecs.ECS
+	cfg            *Config
+	Storage        *MirageStorage
+	ECS            *ecs.ECS
+	CloudWatchLogs *cloudwatchlogs.CloudWatchLogs
 }
 
 func NewECS(cfg *Config, ms *MirageStorage) *ECS {
@@ -43,9 +46,10 @@ func NewECS(cfg *Config, ms *MirageStorage) *ECS {
 	))
 
 	return &ECS{
-		cfg:     cfg,
-		Storage: ms,
-		Client:  ecs.New(sess),
+		cfg:            cfg,
+		Storage:        ms,
+		ECS:            ecs.New(sess),
+		CloudWatchLogs: cloudwatchlogs.New(sess),
 	}
 }
 
@@ -67,7 +71,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 		Value: aws.String(subdomain),
 	})
 
-	tdOut, err := d.Client.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
+	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
 	})
 	if err != nil {
@@ -89,7 +93,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 	log.Printf("Task Override: %s", ov)
 
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
-	out, err := d.Client.RunTask(
+	out, err := d.ECS.RunTask(
 		&ecs.RunTaskInput{
 			Cluster:        aws.String(d.cfg.ECS.Cluster),
 			TaskDefinition: aws.String(taskdef),
@@ -126,55 +130,76 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 	return nil
 }
 
-/*
-func (d *Docker) Logs(subdomain, since, tail string) ([]string, error) {
-	buf := &bytes.Buffer{}
-
-	var parsedSince int64
-	if since != "" {
-		t, err := time.Parse(time.RFC3339, since)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse since: %s", err)
-		}
-		parsedSince = t.Unix()
-	}
-	containerID := d.getContainerIDFromSubdomain(subdomain, d.Storage)
-	if containerID == "" {
-		return nil, fmt.Errorf("subdomain=%s is not found", subdomain)
-	}
-
-	opt := docker.LogsOptions{
-		Container:    containerID,
-		OutputStream: buf,
-		ErrorStream:  buf,
-		Tail:         tail,
-
-		Since:  parsedSince,
-		Stdout: true,
-		Stderr: true,
-	}
-
-	err := d.Client.Logs(opt)
+func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
+	info, err := d.Find(subdomain)
 	if err != nil {
-		return nil, fmt.Errorf("fail to output logs %s", err)
+		return nil, fmt.Errorf("subdomain %s is not found", subdomain)
+	}
+	task := info.task
+	if task == nil {
+		return nil, fmt.Errorf("no task for subdomain %s", subdomain)
 	}
 
-	scanner := bufio.NewScanner(buf)
-
-	logs := make([]string, 0, 50)
-	for scanner.Scan() {
-		logs = append(logs, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("fail to scan outputs of log: %s", err)
+	taskdefOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: task.TaskDefinitionArn,
+		Include:        []*string{aws.String("TAGS")},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to describe task definition")
 	}
 
+	streams := make(map[string][]string)
+	for _, c := range taskdefOut.TaskDefinition.ContainerDefinitions {
+		c := c
+		logConf := c.LogConfiguration
+		if *logConf.LogDriver != "awslogs" {
+			log.Println("LogDriver %s is not supported")
+			continue
+		}
+		group := logConf.Options["awslogs-group"]
+		streamPrefix := logConf.Options["awslogs-stream-prefix"]
+		if group == nil || streamPrefix == nil {
+			log.Println("invalid options. awslogs-group %s awslogs-stream-prefix %s", group, streamPrefix)
+			continue
+		}
+		// streamName: prefix/containerName/taskID
+		streams[*group] = append(
+			streams[*group],
+			fmt.Sprintf("%s/%s/%s", *streamPrefix, *c.Name, info.ShortID),
+		)
+	}
+
+	logs := []string{}
+	for group, streamNames := range streams {
+		group := group
+		for _, stream := range streamNames {
+			stream := stream
+			log.Printf("get log events from group:%s stream:%s start:%s", group, stream, since)
+			in := &cloudwatchlogs.GetLogEventsInput{
+				LogGroupName:  aws.String(group),
+				LogStreamName: aws.String(stream),
+			}
+			if !since.IsZero() {
+				in.StartTime = aws.Int64(since.Unix() * 1000)
+			}
+			eventsOut, err := d.CloudWatchLogs.GetLogEvents(in)
+			if err != nil {
+				log.Printf("failed to get log events from group %s stream %s: %s", group, stream, err)
+			}
+			log.Printf("%d events", len(eventsOut.Events))
+			for _, ev := range eventsOut.Events {
+				logs = append(logs, *ev.Message)
+			}
+		}
+	}
+	if tail > 0 && len(logs) >= tail {
+		return logs[len(logs)-tail:], nil
+	}
 	return logs, nil
 }
-*/
 
 func (d *ECS) Terminate(taskArn string) error {
-	_, err := d.Client.StopTask(&ecs.StopTaskInput{
+	_, err := d.ECS.StopTask(&ecs.StopTaskInput{
 		Cluster: aws.String(d.cfg.ECS.Cluster),
 		Task:    aws.String(taskArn),
 		Reason:  aws.String("Terminate requested by Mirage"),
@@ -183,16 +208,24 @@ func (d *ECS) Terminate(taskArn string) error {
 }
 
 func (d *ECS) TerminateBySubdomain(subdomain string) error {
-	infos, err := d.List()
+	info, err := d.Find(subdomain)
 	if err != nil {
 		return err
 	}
+	return d.Terminate(info.ID)
+}
+
+func (d *ECS) Find(subdomain string) (Information, error) {
+	infos, err := d.List()
+	if err != nil {
+		return Information{}, err
+	}
 	for _, info := range infos {
 		if info.SubDomain == subdomain {
-			return d.Terminate(info.ID)
+			return info, nil
 		}
 	}
-	return fmt.Errorf("subdomain %s is not found", subdomain)
+	return Information{}, fmt.Errorf("subdomain %s is not found", subdomain)
 }
 
 func (d *ECS) List() ([]Information, error) {
@@ -201,7 +234,7 @@ func (d *ECS) List() ([]Information, error) {
 	cluster := aws.String(d.cfg.ECS.Cluster)
 	include := []*string{aws.String("TAGS")}
 	for {
-		listOut, err := d.Client.ListTasks(&ecs.ListTasksInput{
+		listOut, err := d.ECS.ListTasks(&ecs.ListTasksInput{
 			Cluster:   cluster,
 			NextToken: nextToken,
 		})
@@ -212,7 +245,7 @@ func (d *ECS) List() ([]Information, error) {
 			return infos, nil
 		}
 
-		tasksOut, err := d.Client.DescribeTasks(&ecs.DescribeTasksInput{
+		tasksOut, err := d.ECS.DescribeTasks(&ecs.DescribeTasksInput{
 			Cluster: cluster,
 			Tasks:   listOut.TaskArns,
 			Include: include,
@@ -235,6 +268,7 @@ func (d *ECS) List() ([]Information, error) {
 				Image:      shortenArn(*task.TaskDefinitionArn),
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
+				task:       task,
 			}
 			if task.StartedAt != nil {
 				info.Created = *task.StartedAt
