@@ -1,8 +1,12 @@
 GIT_VER := $(shell git describe --tags)
 DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
+export GO111MODULE := on
+
+mirage: *.go
+	go build -o mirage .
 
 clean:
-	rm -rf pkg/*
+	rm -rf pkg/* mirage
 
 binary: clean
 	CGO_ENABLED=0 gox -osarch="linux/amd64 darwin/amd64 windows/amd64 windows/386" -output "pkg/{{.Dir}}-${GIT_VER}-{{.OS}}-{{.Arch}}" -ldflags "-X main.version=${GIT_VER} -X main.buildDate=${DATE} -extldflags \"-static\""

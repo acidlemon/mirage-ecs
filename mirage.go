@@ -14,7 +14,7 @@ var app *Mirage
 type Mirage struct {
 	Config  *Config
 	WebApi  *WebApi
-	Docker  *Docker
+	ECS     *ECS
 	Storage *MirageStorage
 }
 
@@ -23,7 +23,7 @@ func Setup(cfg *Config) {
 	m := &Mirage{
 		Config:  cfg,
 		WebApi:  NewWebApi(cfg),
-		Docker:  NewDocker(cfg, ms),
+		ECS:     NewECS(cfg, ms),
 		Storage: ms,
 	}
 

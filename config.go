@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 
 	"github.com/fsouza/go-dockerclient"
@@ -16,6 +18,25 @@ type Config struct {
 	Docker    DockerCfg  `yaml:"docker"`
 	Storage   StorageCfg `yaml:"storage"`
 	Parameter Paramters  `yaml:"parameters"`
+	ECS       ECSCfg     `yaml:"ecs"`
+}
+
+type ECSCfg struct {
+	Region                string               `yaml:"region"`
+	Cluster               string               `yaml:"cluster"`
+	LaunchType            string               `yaml:"launch_type"`
+	NetworkConfiguration  NetworkConfiguration `yaml:"network_configuration"`
+	DefaultTaskDefinition string               `yaml:"default_task_definition"`
+}
+
+type NetworkConfiguration struct {
+	AwsVpcConfiguration *AwsVpcConfiguration `yaml:"awsvpc_configuration"`
+}
+
+type AwsVpcConfiguration struct {
+	AssignPublicIp *string   `yaml:"assign_public_ip"`
+	SecurityGroups []*string `yaml:"security_groups"`
+	Subnets        []*string `yaml:"subnets"`
 }
 
 type Host struct {
@@ -93,6 +114,7 @@ func NewConfig(path string) *Config {
 			v.Regexp = *paramRegex
 		}
 	}
+	json.NewEncoder(os.Stdout).Encode(cfg)
 
 	return cfg
 }

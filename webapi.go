@@ -41,7 +41,7 @@ func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *WebApi) List(c rocket.CtxData) {
-	info, err := app.Docker.List()
+	info, err := app.ECS.List()
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
@@ -56,8 +56,8 @@ func (api *WebApi) List(c rocket.CtxData) {
 
 func (api *WebApi) Launcher(c rocket.CtxData) {
 	c.Render(api.cfg.Storage.HtmlDir+"/launcher.html", rocket.RenderVars{
-		"DefaultImage": api.cfg.Docker.DefaultImage,
-		"Parameters":   api.cfg.Parameter,
+		"DefaultTaskDefinition": api.cfg.ECS.DefaultTaskDefinition,
+		"Parameters":            api.cfg.Parameter,
 	})
 }
 
@@ -80,7 +80,7 @@ func (api *WebApi) Terminate(c rocket.CtxData) {
 }
 
 func (api *WebApi) ApiList(c rocket.CtxData) {
-	info, err := app.Docker.List()
+	info, err := app.ECS.List()
 	var status interface{}
 	if err != nil {
 		status = err.Error()
@@ -121,7 +121,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	subdomain, _ := c.ParamSingle("subdomain")
-	image, _ := c.ParamSingle("image")
+	taskdef, _ := c.ParamSingle("taskdef")
 	name, _ := c.ParamSingle("name")
 
 	if name == "" {
@@ -139,11 +139,11 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 
 	status := "ok"
 
-	if subdomain == "" || image == "" {
-		status = fmt.Sprintf("parameter required: subdomain=%s, image=%s",
-			subdomain, image)
+	if subdomain == "" || taskdef == "" {
+		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%s",
+			subdomain, taskdef)
 	} else {
-		err := app.Docker.Launch(subdomain, image, name, parameter)
+		err := app.ECS.Launch(subdomain, taskdef, name, parameter)
 		if err != nil {
 			status = err.Error()
 		}
@@ -164,8 +164,8 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	subdomain, _ := c.ParamSingle("subdomain")
-	since, _ := c.ParamSingle("since")
-	tail, _ := c.ParamSingle("tail")
+	//	since, _ := c.ParamSingle("since")
+	//	tail, _ := c.ParamSingle("tail")
 
 	if subdomain == "" {
 		return rocket.RenderVars{
@@ -173,15 +173,15 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 		}
 	}
 
-	logs, err := app.Docker.Logs(subdomain, since, tail)
-	if err != nil {
-		return rocket.RenderVars{
-			"result": err.Error(),
+	/*	logs, err := app.ECS.Logs(subdomain, since, tail)
+		if err != nil {
+			return rocket.RenderVars{
+				"result": err.Error(),
+			}
 		}
-	}
-
+	*/
 	return rocket.RenderVars{
-		"result": logs,
+	//		"result": logs,
 	}
 }
 
@@ -198,11 +198,11 @@ func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
 	if subdomain == "" {
 		status = fmt.Sprintf("parameter required: subdomain")
 	} else {
-		err := app.Docker.Terminate(subdomain)
+		/*		err := app.ECS.Terminate(subdomain)
 
-		if err != nil {
-			status = err.Error()
-		}
+				if err != nil {
+					status = err.Error()
+				}*/
 	}
 
 	result := rocket.RenderVars{

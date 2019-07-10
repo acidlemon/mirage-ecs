@@ -18,9 +18,9 @@
 
 {{ end }}
 
-  <label for="image" class="col-md-2 text-right">image </label>
-  <input type="text" name="image" value="{{ .DefaultImage }}" id="image"
-         class="col-md-5" placeholder="myapp:latest">
+  <label for="taskdef" class="col-md-2 text-right">Task Definition</label>
+  <input type="text" name="taskdef" value="{{ .DefaultTaskDefinition }}" id="taskdef"
+         class="col-md-5" placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp">
   <p class="col-md-5">*Required</p>
 
   <label for="name" class="col-md-2 text-right">container name </label>
