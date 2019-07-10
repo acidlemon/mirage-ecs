@@ -3,10 +3,20 @@ package main
 import (
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/pkg/errors"
+)
+
+const (
+	TagManagedBy   = "ManagedBy"
+	TagName        = "Name"
+	TagSubdomain   = "Subdomain"
+	TagValueMirage = "Mirage"
 )
 
 type ECS struct {
@@ -28,17 +38,44 @@ func NewECS(cfg *Config, ms *MirageStorage) *ECS {
 }
 
 func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[string]string) error {
-	var dockerEnv []string = make([]string, 0)
+	var dockerEnv []*ecs.KeyValuePair
+
 	for _, v := range d.cfg.Parameter {
+		v := v
 		if option[v.Name] == "" {
 			continue
 		}
-
-		dockerEnv = append(dockerEnv, fmt.Sprintf("%s=%s", v.Env, option[v.Name]))
+		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+			Name:  aws.String(v.Env),
+			Value: aws.String(option[v.Name]),
+		})
 	}
-	dockerEnv = append(dockerEnv, fmt.Sprintf("SUBDOMAIN=%s", subdomain))
+	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+		Name:  aws.String("SUBDOMAIN"),
+		Value: aws.String(subdomain),
+	})
 
-	//func (d *App) RunTask(ctx context.Context, tdArn string, sv *ecs.Service, ov *ecs.TaskOverride, count int64) (*ecs.Task, error) {
+	tdOut, err := d.Client.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: aws.String(taskdef),
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to describe task definition")
+	}
+
+	// override envs for each container in taskdef
+	ov := &ecs.TaskOverride{}
+	for _, c := range tdOut.TaskDefinition.ContainerDefinitions {
+		name := *c.Name
+		ov.ContainerOverrides = append(
+			ov.ContainerOverrides,
+			&ecs.ContainerOverride{
+				Name:        aws.String(name),
+				Environment: dockerEnv,
+			},
+		)
+	}
+	log.Printf("Task Override: %s", ov)
+
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.Client.RunTask(
 		&ecs.RunTaskInput{
@@ -52,12 +89,12 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 				},
 			},
 			LaunchType: aws.String(d.cfg.ECS.LaunchType),
-			Overrides:  nil,
+			Overrides:  ov,
 			Count:      aws.Int64(1),
 			Tags: []*ecs.Tag{
-				&ecs.Tag{Key: aws.String("Name"), Value: aws.String(name)},
-				&ecs.Tag{Key: aws.String("Subdomain"), Value: aws.String(subdomain)},
-				&ecs.Tag{Key: aws.String("ManagedBy"), Value: aws.String("Mirage")},
+				&ecs.Tag{Key: aws.String(TagName), Value: aws.String(name)},
+				&ecs.Tag{Key: aws.String(TagSubdomain), Value: aws.String(subdomain)},
+				&ecs.Tag{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
 		},
 	)
@@ -73,27 +110,11 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 
 	task := out.Tasks[0]
 	log.Printf("Task ARN: %s", *task.TaskArn)
+
 	return nil
 }
 
 /*
-func (d *ECS) getContainerIDFromSubdomain(subdomain string, ms *MirageStorage) string {
-	data, err := ms.Get(fmt.Sprintf("subdomain:%s", subdomain))
-	if err != nil {
-		if err == ErrNotFound {
-			return ""
-		}
-		fmt.Printf("cannot find subdomain:%s, err:%s", subdomain, err.Error())
-		return ""
-	}
-	var info Information
-	json.Unmarshal(data, &info)
-	//dump.Dump(info)
-	containerID := string(info.ID)
-
-	return containerID
-}
-
 func (d *Docker) Logs(subdomain, since, tail string) ([]string, error) {
 	buf := &bytes.Buffer{}
 
@@ -138,66 +159,118 @@ func (d *Docker) Logs(subdomain, since, tail string) ([]string, error) {
 
 	return logs, nil
 }
-
-func (d *Docker) Terminate(subdomain string) error {
-	ms := d.Storage
-
-	containerID := d.getContainerIDFromSubdomain(subdomain, ms)
-
-	err := d.Client.StopContainer(containerID, 5)
-	if err != nil {
-		return err
-	}
-
-	ms.RemoveFromSubdomainMap(subdomain)
-
-	return nil
-}
-
-// extends docker.APIContainers for sort pkg
-type ContainerSlice []docker.APIContainers
-
-func (c ContainerSlice) Len() int {
-	return len(c)
-}
-func (c ContainerSlice) Less(i, j int) bool {
-	return c[i].ID < c[j].ID
-}
-func (c ContainerSlice) Swap(i, j int) {
-	c[i], c[j] = c[j], c[i]
-}
 */
+
+func (d *ECS) Terminate(taskArn string) error {
+	_, err := d.Client.StopTask(&ecs.StopTaskInput{
+		Cluster: aws.String(d.cfg.ECS.Cluster),
+		Task:    aws.String(taskArn),
+		Reason:  aws.String("Terminate requested by Mirage"),
+	})
+	return err
+}
+
 func (d *ECS) List() ([]Information, error) {
-	return []Information{}, nil
-	/*
-		ms := d.Storage
-		subdomainList, err := ms.GetSubdomainList()
+	infos := []Information{}
+	var nextToken *string
+	cluster := aws.String(d.cfg.ECS.Cluster)
+	include := []*string{aws.String("TAGS")}
+	for {
+		listOut, err := d.Client.ListTasks(&ecs.ListTasksInput{
+			Cluster:   cluster,
+			NextToken: nextToken,
+		})
 		if err != nil {
-			return nil, err
+			return infos, errors.Wrap(err, "failed to list tasks")
+		}
+		if len(listOut.TaskArns) == 0 {
+			return infos, nil
 		}
 
-		containers, _ := d.Client.ListContainers(docker.ListContainersOptions{})
-		sort.Sort(ContainerSlice(containers))
+		tasksOut, err := d.Client.DescribeTasks(&ecs.DescribeTasksInput{
+			Cluster: cluster,
+			Tasks:   listOut.TaskArns,
+			Include: include,
+		})
+		if err != nil {
+			return infos, errors.Wrap(err, "failed to describe tasks")
+		}
 
-		result := []Information{}
-		for _, subdomain := range subdomainList {
-			infoData, err := ms.Get(fmt.Sprintf("subdomain:%s", subdomain))
-			if err != nil {
-				fmt.Printf("ms.Get failed err=%s\n", err.Error())
+		for _, task := range tasksOut.Tasks {
+			task := task
+			if getTagsFromTask(task, TagManagedBy) != TagValueMirage {
+				// task is not managed by Mirage
 				continue
 			}
-
-			var info Information
-			err = json.Unmarshal(infoData, &info)
-			//dump.Dump(info)
-
-			index := sort.Search(len(containers), func(i int) bool { return containers[i].ID >= info.ID })
-
-			if index < len(containers) && containers[index].ID == info.ID {
-				// found
-				result = append(result, info)
+			info := Information{
+				ID:        *task.TaskArn,
+				ShortID:   shortenArn(*task.TaskArn),
+				SubDomain: getTagsFromTask(task, "Subdomain"),
+				GitBranch: getEnvironmentFromTask(task, "GIT_BRANCH"),
+				Image:     shortenArn(*task.TaskDefinitionArn),
+				IPAddress: getIPV4AddressFromTask(task),
 			}
+			if task.StartedAt != nil {
+				info.Created = *task.StartedAt
+			}
+			infos = append(infos, info)
 		}
 
-		return result, nil*/
+		nextToken = listOut.NextToken
+		if nextToken == nil {
+			break
+		}
+	}
+
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].SubDomain < infos[j].SubDomain
+	})
+
+	return infos, nil
+}
+
+func shortenArn(arn string) string {
+	p := strings.SplitN(arn, ":", 6)
+	if len(p) != 6 {
+		return ""
+	}
+	ps := strings.Split(p[5], "/")
+	if len(ps) == 0 {
+		return ""
+	}
+	return ps[len(ps)-1]
+}
+
+func getIPV4AddressFromTask(task *ecs.Task) string {
+	if len(task.Attachments) == 0 {
+		return ""
+	}
+	for _, d := range task.Attachments[0].Details {
+		if *d.Name == "privateIPv4Address" {
+			return *d.Value
+		}
+	}
+	return ""
+}
+
+func getTagsFromTask(task *ecs.Task, name string) string {
+	for _, t := range task.Tags {
+		if *t.Key == name {
+			return *t.Value
+		}
+	}
+	return ""
+}
+
+func getEnvironmentFromTask(task *ecs.Task, name string) string {
+	if len(task.Overrides.ContainerOverrides) == 0 {
+		return ""
+	}
+	ov := task.Overrides.ContainerOverrides[0]
+	for _, env := range ov.Environment {
+		if *env.Name == name {
+			return *env.Value
+		}
+	}
+	return ""
 }
