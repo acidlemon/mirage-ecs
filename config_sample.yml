@@ -4,10 +4,6 @@ host:
   # webapi: docker.dev.example.net
   webapi: localhost
 
-  # host suffix
-  # if you access to foo.dev.example.net, mirage search "foo" subdomain container
-  reverse_proxy_suffix: .dev.example.net
-
 listen:
   # listen address
   # default is only listen from localhost
@@ -19,29 +15,7 @@ listen:
     - listen: 8080
       target: 5000
 
-  # not implemented
-  # we recommend to use frontend http(like nginx) to SSL termination
-  # HTTPS:
-  #   - 443
-
-docker:
-  # if you use docker through http, specify like "http://localhost:4243"
-  endpoint: unix:///var/run/docker.sock
-
-  # if you specify this, fill the form as default value on web interface.
-  # default_image: myapp:latest
-
-  # specify host_config, see https://godoc.org/github.com/fsouza/go-dockerclient#HostConfig
-  # host_config:
-  #   # means `docker run -p 45000-46000:12345/tcp`
-  #   PortBindings:
-  #     "12345/tcp":
-  #      -  HostPort: "45000-46000"
-  #  # means `docker run --rm`
-  #   AutoRemove: true
-
 storage:
-  datadir: ./data
   htmldir: ./html
 
 parameters:
@@ -55,4 +29,16 @@ parameters:
   # rule is constraint of value using regexp.
   # required means required or optional parameter (boolean value)
 
-
+ecs:
+  region: ap-northeast-1
+  cluster: mirage
+  launch_type: FARGATE
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - '{{ env "SUBNET_A" "subnet-aaaaaa" }}'
+        - '{{ env "SUBNET_B" "subnet-bbbbbb" }}'
+      security_groups:
+        - '{{ env "SECURITY_GROUP_1" "sg-111111" }}'
+      assign_public_ip: ENABLED
+  default_task_definition: '{{ env "DEFAULT_TASKDEF" "arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp" }}'

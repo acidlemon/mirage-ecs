@@ -2,14 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
 	"regexp"
 
 	"github.com/fsouza/go-dockerclient"
-
-	"gopkg.in/yaml.v1"
+	config "github.com/kayac/go-config"
 )
 
 type Config struct {
@@ -99,13 +97,9 @@ func NewConfig(path string) *Config {
 		},
 	}
 
-	data, err := ioutil.ReadFile(path)
+	err := config.LoadWithEnv(&cfg, path)
 	if err != nil {
-		log.Fatalf("cannot read %v: %v", path, err)
-	}
-
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		log.Fatalf("powawa: %v", err)
+		log.Fatalf("cannot load config: %s: %s", path, err)
 	}
 
 	for _, v := range cfg.Parameter {
