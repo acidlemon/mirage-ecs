@@ -195,13 +195,17 @@ func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
 	status := "ok"
 
 	id, _ := c.ParamSingle("id")
-	if id == "" {
-		status = fmt.Sprintf("parameter required: id")
-	} else {
-		err := app.ECS.Terminate(id)
-		if err != nil {
+	subdomain, _ := c.ParamSingle("subdomain")
+	if id != "" {
+		if err := app.ECS.Terminate(id); err != nil {
 			status = err.Error()
 		}
+	} else if subdomain != "" {
+		if err := app.ECS.TerminateBySubdomain(subdomain); err != nil {
+			status = err.Error()
+		}
+	} else {
+		status = fmt.Sprintf("parameter required: id")
 	}
 
 	result := rocket.RenderVars{

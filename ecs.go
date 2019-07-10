@@ -5,12 +5,24 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
 )
+
+type Information struct {
+	ID         string    `json:"id"`
+	ShortID    string    `json:"short_id"`
+	SubDomain  string    `json:"subdomain"`
+	GitBranch  string    `json:"branch"`
+	Image      string    `json:"image"`
+	IPAddress  string    `json:"ipaddress"`
+	Created    time.Time `json:"created"`
+	LastStatus string    `json:"last_status"`
+}
 
 const (
 	TagManagedBy   = "ManagedBy"
@@ -170,6 +182,19 @@ func (d *ECS) Terminate(taskArn string) error {
 	return err
 }
 
+func (d *ECS) TerminateBySubdomain(subdomain string) error {
+	infos, err := d.List()
+	if err != nil {
+		return err
+	}
+	for _, info := range infos {
+		if info.SubDomain == subdomain {
+			return d.Terminate(info.ID)
+		}
+	}
+	return fmt.Errorf("subdomain %s is not found", subdomain)
+}
+
 func (d *ECS) List() ([]Information, error) {
 	infos := []Information{}
 	var nextToken *string
@@ -203,12 +228,13 @@ func (d *ECS) List() ([]Information, error) {
 				continue
 			}
 			info := Information{
-				ID:        *task.TaskArn,
-				ShortID:   shortenArn(*task.TaskArn),
-				SubDomain: getTagsFromTask(task, "Subdomain"),
-				GitBranch: getEnvironmentFromTask(task, "GIT_BRANCH"),
-				Image:     shortenArn(*task.TaskDefinitionArn),
-				IPAddress: getIPV4AddressFromTask(task),
+				ID:         *task.TaskArn,
+				ShortID:    shortenArn(*task.TaskArn),
+				SubDomain:  getTagsFromTask(task, "Subdomain"),
+				GitBranch:  getEnvironmentFromTask(task, "GIT_BRANCH"),
+				Image:      shortenArn(*task.TaskDefinitionArn),
+				IPAddress:  getIPV4AddressFromTask(task),
+				LastStatus: *task.LastStatus,
 			}
 			if task.StartedAt != nil {
 				info.Created = *task.StartedAt

@@ -11,16 +11,6 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-type Information struct {
-	ID        string    `json:"id"`
-	ShortID   string    `json:"short_id"`
-	SubDomain string    `json:"subdomain"`
-	GitBranch string    `json:"branch"`
-	Image     string    `json:"image"`
-	IPAddress string    `json:"ipaddress"`
-	Created   time.Time `json:"created"`
-}
-
 type Docker struct {
 	cfg     *Config
 	Storage *MirageStorage
