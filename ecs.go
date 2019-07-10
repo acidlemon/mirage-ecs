@@ -35,21 +35,46 @@ const (
 
 type ECS struct {
 	cfg            *Config
-	Storage        *MirageStorage
 	ECS            *ecs.ECS
 	CloudWatchLogs *cloudwatchlogs.CloudWatchLogs
 }
 
-func NewECS(cfg *Config, ms *MirageStorage) *ECS {
+func NewECS(cfg *Config) *ECS {
 	sess := session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))
 
-	return &ECS{
+	ecs := &ECS{
 		cfg:            cfg,
-		Storage:        ms,
 		ECS:            ecs.New(sess),
 		CloudWatchLogs: cloudwatchlogs.New(sess),
+	}
+	go ecs.updateReverseProxy()
+	return ecs
+}
+
+func (d *ECS) updateReverseProxy() {
+	rp := app.ReverseProxy
+	for {
+		infos, err := d.List()
+		if err != nil {
+			log.Println(err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		available := make(map[string]bool)
+		for _, info := range infos {
+			available[info.SubDomain] = true
+			if !rp.Exists(info.SubDomain) && info.LastStatus == "RUNNING" {
+				rp.AddSubdomain(info.SubDomain, info.IPAddress)
+			}
+		}
+		for _, subdomain := range rp.Subdomains() {
+			if !available[subdomain] {
+				rp.RemoveSubdomain(subdomain)
+			}
+		}
+		time.Sleep(10 * time.Second)
 	}
 }
 

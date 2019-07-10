@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -12,19 +11,18 @@ import (
 var app *Mirage
 
 type Mirage struct {
-	Config  *Config
-	WebApi  *WebApi
-	ECS     *ECS
-	Storage *MirageStorage
+	Config       *Config
+	WebApi       *WebApi
+	ReverseProxy *ReverseProxy
+	ECS          *ECS
 }
 
 func Setup(cfg *Config) {
-	ms := NewMirageStorage(cfg)
 	m := &Mirage{
-		Config:  cfg,
-		WebApi:  NewWebApi(cfg),
-		ECS:     NewECS(cfg, ms),
-		Storage: ms,
+		Config:       cfg,
+		WebApi:       NewWebApi(cfg),
+		ReverseProxy: NewReverseProxy(cfg),
+		ECS:          NewECS(cfg),
 	}
 
 	app = m
@@ -40,7 +38,7 @@ func Run() {
 			laddr := fmt.Sprintf("%s:%d", app.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				log.Printf("cannot listen %s", laddr)
+				fmt.Println("cannot listen %s", laddr)
 				return
 			}
 
@@ -66,10 +64,23 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 	case m.isWebApiHost(host):
 		m.WebApi.ServeHTTP(w, req)
 
+	case m.isDockerHost(host):
+		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
+
 	default:
 		// return 404
 		http.NotFound(w, req)
 	}
+
+}
+
+func (m *Mirage) isDockerHost(host string) bool {
+	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
+		subdomain := strings.ToLower(strings.Split(host, ".")[0])
+		return m.ReverseProxy.Exists(subdomain)
+	}
+
+	return false
 }
 
 func (m *Mirage) isWebApiHost(host string) bool {
