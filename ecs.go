@@ -179,13 +179,13 @@ func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 		c := c
 		logConf := c.LogConfiguration
 		if *logConf.LogDriver != "awslogs" {
-			log.Println("[warn] LogDriver %s is not supported")
+			log.Printf("[warn] LogDriver %s is not supported", *logConf.LogDriver)
 			continue
 		}
 		group := logConf.Options["awslogs-group"]
 		streamPrefix := logConf.Options["awslogs-stream-prefix"]
 		if group == nil || streamPrefix == nil {
-			log.Println("[warn] invalid options. awslogs-group %s awslogs-stream-prefix %s", group, streamPrefix)
+			log.Printf("[warn] invalid options. awslogs-group %s awslogs-stream-prefix %s", *group, *streamPrefix)
 			continue
 		}
 		// streamName: prefix/containerName/taskID
