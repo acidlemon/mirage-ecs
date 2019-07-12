@@ -54,6 +54,7 @@ func NewECS(cfg *Config) *ECS {
 }
 
 func (d *ECS) updateReverseProxy() {
+	log.Println("[debug] starting up ECS.updateReverseProxy()")
 	rp := app.ReverseProxy
 	for {
 		infos, err := d.List()

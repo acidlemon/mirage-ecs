@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"os"
 	"regexp"
 
 	config "github.com/kayac/go-config"
@@ -87,7 +85,6 @@ func NewConfig(path string) *Config {
 			v.Regexp = *paramRegex
 		}
 	}
-	json.NewEncoder(os.Stdout).Encode(cfg)
 
 	return cfg
 }

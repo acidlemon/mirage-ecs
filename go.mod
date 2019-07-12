@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/aws/aws-sdk-go v1.20.17
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/hashicorp/logutils v1.0.0
 	github.com/k0kubun/colorstring v0.0.0-20150214042306-9440f1994b88 // indirect
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/kayac/go-config v0.1.0

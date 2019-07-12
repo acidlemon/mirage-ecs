@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -38,7 +39,7 @@ func Run() {
 			laddr := fmt.Sprintf("%s:%d", app.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				fmt.Println("cannot listen %s", laddr)
+				log.Printf("[error] cannot listen %s", laddr)
 				return
 			}
 
@@ -47,12 +48,12 @@ func Run() {
 				app.ServeHTTPWithPort(w, req, port)
 			})
 
-			fmt.Println("listen port:", port)
+			log.Println("[info] listen port:", port)
 			http.Serve(listener, mux)
 		}(v.ListenPort)
 	}
 
-	// TODO SSL Support
+	log.Println("[info] Launch succeeded!")
 
 	wg.Wait()
 }
