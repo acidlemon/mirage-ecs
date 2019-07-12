@@ -81,15 +81,18 @@ You can add custom parameter. "rule" option is regexp string.
 Setup
 ------
 
-1. Download [binary](https://github.com/acidlemon/mirage-ecs/releases) or `go get`
-2. Rename `config_sample.yml` to `config.yml`
-3. Edit `config.yml` to your environment
-4. Change your domain setting to fit your `config.yml`
-5. Run `mirage-ecs`
+In docker/ directory,
+
+1. Edit `config.yml` to your environment.
+1. Do `make` to create a docker image.
+1. Push the image to ECR.
+1. Put mirage-ecs task definition to ECS.
+   - See also [mirage-ecs-taskdef.json](mirage-ecs-taskdef.json)
+1. Run mirage-ecs service in your ECS.
 
 License
 --------
 
 The MIT License (MIT)
 
-(c) 2019 acidlemon. (c) 2019 KAYAC Inc. (c) 2019 fujiwara
+(c) 2019 acidlemon. (c) 2019 KAYAC Inc. (c) 2019 fujiwara.
