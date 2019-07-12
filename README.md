@@ -40,7 +40,7 @@ $ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
 curl http://docker.dev.example.net/api/launch \
   -d subdomain=cool-feature \
   -d branch=feature/cool \
-  -d taskdef=arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp
+  -d taskdef=myapp
 ```
 4. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
 
@@ -57,7 +57,7 @@ curl http://docker.dev.example.net/api/terminate \
 5. Fill launch options.
   - subdomain: cool-feature
   - branch: feature/cool
-  - taskdef: arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp
+  - taskdef: myapp
 6. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
 7. Press "Terminate" button.
 
