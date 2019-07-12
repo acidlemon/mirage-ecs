@@ -23,6 +23,16 @@ listen:
 
 Prerequisite: you should resolve `*.dev.example.net` to your ECS task.
 
+### Requirements
+
+mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
+
+If your account do not enable these settings yet, you must enable that.
+
+```console
+$ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
+```
+
 ### Using CLI
 
 3. Launch ECS task container using curl.
