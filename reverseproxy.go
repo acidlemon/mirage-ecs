@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -32,6 +33,23 @@ func (r *ReverseProxy) ServeHTTPWithPort(w http.ResponseWriter, req *http.Reques
 	} else {
 		http.NotFound(w, req)
 	}
+}
+
+func (r *ReverseProxy) Exists(subdomain string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, exists := r.domainMap[subdomain]
+	return exists
+}
+
+func (r *ReverseProxy) Subdomains() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ds := make([]string, 0, len(r.domainMap))
+	for name, _ := range r.domainMap {
+		ds = append(ds, name)
+	}
+	return ds
 }
 
 func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
@@ -68,7 +86,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
 		handlers[v.ListenPort] = handler
 	}
 
-	fmt.Println("add subdomain: ", subdomain)
+	log.Printf("add subdomain: %s -> %s", subdomain, ipaddress)
 
 	// add to map
 	r.mu.Lock()
@@ -82,5 +100,6 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	log.Println("remove subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
 }

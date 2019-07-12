@@ -58,9 +58,9 @@ body {
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
 <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
 <script type="text/javascript">
-function terminate(subdomain) {
-    $("#subdomain").attr("value", subdomain);
-    $("#terminate-" + subdomain).html(
+function terminate(id) {
+    $("#terminate-id").attr("value", id);
+    $("#terminate-" + id).html(
        '<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>' +
        ' Terminating...')
     $("#termination").submit();

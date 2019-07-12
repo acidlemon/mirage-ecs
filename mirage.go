@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -15,27 +14,15 @@ type Mirage struct {
 	Config       *Config
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
-	Docker       *Docker
-	Storage      *MirageStorage
+	ECS          *ECS
 }
 
 func Setup(cfg *Config) {
-	ms := NewMirageStorage(cfg)
 	m := &Mirage{
 		Config:       cfg,
 		WebApi:       NewWebApi(cfg),
 		ReverseProxy: NewReverseProxy(cfg),
-		Docker:       NewDocker(cfg, ms),
-		Storage:      ms,
-	}
-
-	infolist, err := m.Docker.List()
-	if err != nil {
-		fmt.Println("cannot initialize reverse proxy: ", err.Error())
-	}
-
-	for _, info := range infolist {
-		m.ReverseProxy.AddSubdomain(info.SubDomain, info.IPAddress)
+		ECS:          NewECS(cfg),
 	}
 
 	app = m
@@ -89,22 +76,8 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 
 func (m *Mirage) isDockerHost(host string) bool {
 	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
-		ms := m.Storage
-		subdomainList, err := ms.GetSubdomainList()
-		if err != nil {
-			return false
-		}
-
 		subdomain := strings.ToLower(strings.Split(host, ".")[0])
-		sortedList := sort.StringSlice(subdomainList)
-		sortedList.Sort()
-		index := sortedList.Search(subdomain)
-		if index < len(sortedList) && sortedList[index] == subdomain {
-			// found
-			return true
-		}
-
-		return false
+		return m.ReverseProxy.Exists(subdomain)
 	}
 
 	return false
