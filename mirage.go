@@ -69,8 +69,13 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
 
 	default:
-		// return 404
-		http.NotFound(w, req)
+		if req.URL.Path == "/" {
+			// otherwise root returns 200 (for healthcheck)
+			http.Error(w, "mirage-ecs", http.StatusOK)
+		} else {
+			// return 404
+			http.NotFound(w, req)
+		}
 	}
 
 }
