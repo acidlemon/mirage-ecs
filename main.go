@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/logutils"
@@ -28,19 +29,12 @@ func main() {
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.BoolVar(&showConfig, "x", false, "show config")
 	logLevel := flag.String("log-level", "info", "log level (trace, debug, info, warn, error)")
+	flag.VisitAll(overrideWithEnv)
 	flag.Parse()
 
 	if showVersion {
 		fmt.Printf("mirage %v (%v)\n", version, buildDate)
 		return
-	}
-
-	cfg := NewConfig(*confFile)
-
-	if showConfig {
-		fmt.Println("mirage config:")
-		pp.Print(cfg)
-		fmt.Println("") // add linebreak
 	}
 
 	filter := &logutils.LevelFilter{
@@ -50,6 +44,22 @@ func main() {
 	}
 	log.SetOutput(filter)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
+	log.Printf("[debug] setting log level: %s", *logLevel)
+
+	cfg := NewConfig(*confFile)
+	if showConfig {
+		fmt.Println("mirage config:")
+		pp.Print(cfg)
+		fmt.Println("") // add linebreak
+	}
 	Setup(cfg)
 	Run()
+}
+
+func overrideWithEnv(f *flag.Flag) {
+	name := strings.ToUpper(f.Name)
+	name = strings.Replace(name, "-", "_", -1)
+	if s := os.Getenv("MIRAGE_" + name); s != "" {
+		f.Value.Set(s)
+	}
 }

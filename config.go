@@ -60,6 +60,7 @@ type Parameter struct {
 type Paramters []*Parameter
 
 func NewConfig(path string) *Config {
+	log.Printf("[info] loading config file: %s", path)
 	// default config
 	cfg := &Config{
 		Host: Host{
