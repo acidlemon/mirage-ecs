@@ -33,6 +33,16 @@ const (
 	TagValueMirage = "Mirage"
 )
 
+type NotFoundError string
+
+func (e NotFoundError) Error() string {
+	return string(e)
+}
+
+func NewNotFoundError(name string) error {
+	return NotFoundError(fmt.Sprintf("%s is not found", name))
+}
+
 type ECS struct {
 	cfg            *Config
 	ECS            *ecs.ECS
@@ -117,6 +127,21 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 		)
 	}
 	log.Printf("[debug] Task Override: %s", ov)
+
+	if info, err := d.Find(subdomain); err != nil {
+		switch err.(type) {
+		case NotFoundError:
+			// do nothing
+		default:
+			return err
+		}
+	} else {
+		log.Printf("[info] subdomain %s is already running on task %s. Terminate.", subdomain, info.ID)
+		err := d.Terminate(info.ID)
+		if err != nil {
+			return err
+		}
+	}
 
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
@@ -226,6 +251,7 @@ func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 }
 
 func (d *ECS) Terminate(taskArn string) error {
+	log.Printf("[info] stop task %s", taskArn)
 	_, err := d.ECS.StopTask(&ecs.StopTaskInput{
 		Cluster: aws.String(d.cfg.ECS.Cluster),
 		Task:    aws.String(taskArn),
@@ -252,7 +278,7 @@ func (d *ECS) Find(subdomain string) (Information, error) {
 			return info, nil
 		}
 	}
-	return Information{}, fmt.Errorf("subdomain %s is not found", subdomain)
+	return Information{}, NewNotFoundError(subdomain)
 }
 
 func (d *ECS) List() ([]Information, error) {
