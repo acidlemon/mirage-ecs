@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"os"
 	"regexp"
 
 	config "github.com/kayac/go-config"
@@ -62,6 +60,7 @@ type Parameter struct {
 type Paramters []*Parameter
 
 func NewConfig(path string) *Config {
+	log.Printf("[info] loading config file: %s", path)
 	// default config
 	cfg := &Config{
 		Host: Host{
@@ -87,7 +86,6 @@ func NewConfig(path string) *Config {
 			v.Regexp = *paramRegex
 		}
 	}
-	json.NewEncoder(os.Stdout).Encode(cfg)
 
 	return cfg
 }

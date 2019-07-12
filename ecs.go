@@ -54,11 +54,12 @@ func NewECS(cfg *Config) *ECS {
 }
 
 func (d *ECS) updateReverseProxy() {
+	log.Println("[debug] starting up ECS.updateReverseProxy()")
 	rp := app.ReverseProxy
 	for {
 		infos, err := d.List()
 		if err != nil {
-			log.Println(err)
+			log.Println("[warn]", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -115,7 +116,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 			},
 		)
 	}
-	log.Printf("Task Override: %s", ov)
+	log.Printf("[debug] Task Override: %s", ov)
 
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
@@ -150,7 +151,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 	}
 
 	task := out.Tasks[0]
-	log.Printf("Task ARN: %s", *task.TaskArn)
+	log.Printf("[info] launced task ARN: %s", *task.TaskArn)
 
 	return nil
 }
@@ -178,13 +179,13 @@ func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 		c := c
 		logConf := c.LogConfiguration
 		if *logConf.LogDriver != "awslogs" {
-			log.Println("LogDriver %s is not supported")
+			log.Println("[warn] LogDriver %s is not supported")
 			continue
 		}
 		group := logConf.Options["awslogs-group"]
 		streamPrefix := logConf.Options["awslogs-stream-prefix"]
 		if group == nil || streamPrefix == nil {
-			log.Println("invalid options. awslogs-group %s awslogs-stream-prefix %s", group, streamPrefix)
+			log.Println("[warn] invalid options. awslogs-group %s awslogs-stream-prefix %s", group, streamPrefix)
 			continue
 		}
 		// streamName: prefix/containerName/taskID
@@ -199,7 +200,7 @@ func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 		group := group
 		for _, stream := range streamNames {
 			stream := stream
-			log.Printf("get log events from group:%s stream:%s start:%s", group, stream, since)
+			log.Printf("[debug] get log events from group:%s stream:%s start:%s", group, stream, since)
 			in := &cloudwatchlogs.GetLogEventsInput{
 				LogGroupName:  aws.String(group),
 				LogStreamName: aws.String(stream),
@@ -209,9 +210,10 @@ func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 			}
 			eventsOut, err := d.CloudWatchLogs.GetLogEvents(in)
 			if err != nil {
-				log.Printf("failed to get log events from group %s stream %s: %s", group, stream, err)
+				log.Printf("[warn] failed to get log events from group %s stream %s: %s", group, stream, err)
+				continue
 			}
-			log.Printf("%d events", len(eventsOut.Events))
+			log.Printf("[debug] %d log events", len(eventsOut.Events))
 			for _, ev := range eventsOut.Events {
 				logs = append(logs, *ev.Message)
 			}
