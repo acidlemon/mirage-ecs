@@ -1,0 +1,32 @@
+host:
+  webapi: '{{ env "MIRAGE_WEBAPI_HOST" "localhost" }}'
+  reverse_proxy_suffix: '{{ env "MIRAGE_REVERSEPROXY_SUFFIX" ".dev.example.net" }}'
+
+listen:
+  foreign_address: 0.0.0.0
+
+  http:
+    - listen: 80
+      target: 80
+
+htmldir: ./html
+parameters:
+  - name: branch
+    env: GIT_BRANCH
+    rule: ""
+    required: true
+
+ecs:
+  region: '{{ env "AWS_REGION" "us-east-1" }}'
+  cluster: '{{ env "MIRAGE_ECS_CLUSTER" "default" }}'
+  launch_type: '{{ env "MIRAGE_ECS_LAUNCH_TYPE" "FARGATE" }}'
+  default_task_definition: '{{ env "MIRAGE_DEFAULT_TASKDEF" "myapp" }}'
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - '{{ env "MIRAGE_SUBNET_1" "subnet-aaaaaa" }}'
+        - '{{ env "MIRAGE_SUBNET_2" "subnet-bbbbbb" }}'
+        - '{{ env "MIRAGE_SUBNET_3" "subnet-cccccc" }}'
+      security_groups:
+        - '{{ env "MIRAGE_SECURITY_GROUP" "sg-111111" }}'
+      assign_public_ip: '{{ env "MIRAGE_ECS_ASSIGN_PUBLIC_IP" "ENABLED" }}'
