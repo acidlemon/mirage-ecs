@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"sync"
 
@@ -29,8 +30,10 @@ func (r *ReverseProxy) ServeHTTPWithPort(w http.ResponseWriter, req *http.Reques
 	subdomain := strings.ToLower(strings.Split(req.Host, ".")[0])
 
 	if handler := r.findHandler(subdomain, port); handler != nil {
+		log.Printf("[debug] proxy handler found for subdomain %s", subdomain)
 		handler.ServeHTTP(w, req)
 	} else {
+		log.Printf("[warn] proxy handler not found for subdomain %s", subdomain)
 		http.NotFound(w, req)
 	}
 }
@@ -39,7 +42,15 @@ func (r *ReverseProxy) Exists(subdomain string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	_, exists := r.domainMap[subdomain]
-	return exists
+	if exists {
+		return true
+	}
+	for name, _ := range r.domainMap {
+		if m, _ := path.Match(name, subdomain); m {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ReverseProxy) Subdomains() []string {
@@ -58,7 +69,12 @@ func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
 
 	proxyInfo, ok := r.domainMap[subdomain]
 	if !ok {
-		return nil
+		for name, info := range r.domainMap {
+			if m, _ := path.Match(name, subdomain); m {
+				proxyInfo = info
+				break
+			}
+		}
 	}
 
 	handler, ok := proxyInfo.proxyHandlers[port]

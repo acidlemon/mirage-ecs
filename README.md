@@ -50,6 +50,9 @@ curl http://docker.dev.example.net/api/terminate \
   -d subdomain=cool-feature
 ```
 
+`subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
+Mirage matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
+
 ### Using Web Interface
 
 3. Access to mirage web interface via "http://docker.dev.example.net/".

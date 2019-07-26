@@ -26,7 +26,6 @@ ecs:
       subnets:
         - '{{ env "MIRAGE_SUBNET_1" "subnet-aaaaaa" }}'
         - '{{ env "MIRAGE_SUBNET_2" "subnet-bbbbbb" }}'
-        - '{{ env "MIRAGE_SUBNET_3" "subnet-cccccc" }}'
       security_groups:
         - '{{ env "MIRAGE_SECURITY_GROUP" "sg-111111" }}'
       assign_public_ip: '{{ env "MIRAGE_ECS_ASSIGN_PUBLIC_IP" "ENABLED" }}'

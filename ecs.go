@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"sort"
@@ -28,7 +29,6 @@ type Information struct {
 
 const (
 	TagManagedBy   = "ManagedBy"
-	TagName        = "Name"
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
 )
@@ -89,7 +89,7 @@ func (d *ECS) updateReverseProxy() {
 	}
 }
 
-func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[string]string) error {
+func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string) error {
 	var dockerEnv []*ecs.KeyValuePair
 
 	for _, v := range d.cfg.Parameter {
@@ -104,7 +104,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 	}
 	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
 		Name:  aws.String("SUBDOMAIN"),
-		Value: aws.String(subdomain),
+		Value: aws.String(encodeTagValue(subdomain)),
 	})
 
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
@@ -159,8 +159,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, name string, option map[s
 			Overrides:  ov,
 			Count:      aws.Int64(1),
 			Tags: []*ecs.Tag{
-				&ecs.Tag{Key: aws.String(TagName), Value: aws.String(name)},
-				&ecs.Tag{Key: aws.String(TagSubdomain), Value: aws.String(subdomain)},
+				&ecs.Tag{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
 				&ecs.Tag{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
 		},
@@ -316,7 +315,7 @@ func (d *ECS) List() ([]Information, error) {
 			info := Information{
 				ID:         *task.TaskArn,
 				ShortID:    shortenArn(*task.TaskArn),
-				SubDomain:  getTagsFromTask(task, "Subdomain"),
+				SubDomain:  decodeTagValue(getTagsFromTask(task, "Subdomain")),
 				GitBranch:  getEnvironmentFromTask(task, "GIT_BRANCH"),
 				Image:      shortenArn(*task.TaskDefinitionArn),
 				IPAddress:  getIPV4AddressFromTask(task),
@@ -386,4 +385,17 @@ func getEnvironmentFromTask(task *ecs.Task, name string) string {
 		}
 	}
 	return ""
+}
+
+func encodeTagValue(s string) string {
+	return base64.URLEncoding.EncodeToString([]byte(s))
+}
+
+func decodeTagValue(s string) string {
+	d, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		log.Println("[warn] failed to decode tag value %s %s", s, err)
+		return s
+	}
+	return string(d)
 }
