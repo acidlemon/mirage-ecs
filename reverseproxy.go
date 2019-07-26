@@ -75,6 +75,7 @@ func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
 				break
 			}
 		}
+		return nil
 	}
 
 	handler, ok := proxyInfo.proxyHandlers[port]
