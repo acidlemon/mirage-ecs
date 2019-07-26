@@ -74,6 +74,7 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 			http.Error(w, "mirage-ecs", http.StatusOK)
 		} else {
 			// return 404
+			log.Printf("[warn] host %s is not found", host)
 			http.NotFound(w, req)
 		}
 	}
