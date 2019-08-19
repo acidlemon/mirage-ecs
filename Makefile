@@ -3,7 +3,7 @@ DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 export GO111MODULE := on
 
 mirage-ecs: *.go
-	go build -o mirage-ecs .
+	CGO_ENABLED=0 go build --ldflags '-extldflags "-static"' -o mirage-ecs  .
 
 clean:
 	rm -rf pkg/* mirage-ecs
@@ -21,3 +21,7 @@ package: binary
          -exec cp -r ../html ../config_sample.yml mirage/ \; \
          -exec zip -r {}.zip mirage \;     \
          -exec rm -rf mirage \;
+
+docker-image:
+	docker build -t mirage-ecs -f docker/Dockerfile .
+
