@@ -3,3 +3,4 @@ mirage
 mirage-ecs
 *~
 .envrc
+pkg
