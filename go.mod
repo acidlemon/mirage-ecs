@@ -1,4 +1,4 @@
-module github.com/acidlemon/mirage
+module github.com/acidlemon/mirage-ecs
 
 go 1.12
 

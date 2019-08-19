@@ -16,8 +16,8 @@ binary: clean
 
 package: binary
 	cd ./pkg && find . -name "*${GIT_VER}*" -type f \
-         -exec mkdir -p mirage/data \;  \
-         -exec cp {} mirage/mirage \;   \
+         -exec mkdir -p mirage \;  \
+         -exec cp {} mirage/mirage-ecs \;   \
          -exec cp -r ../html ../config_sample.yml mirage/ \; \
          -exec zip -r {}.zip mirage \;     \
          -exec rm -rf mirage \;
