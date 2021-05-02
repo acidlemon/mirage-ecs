@@ -123,7 +123,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	subdomain, _ := c.ParamSingle("subdomain")
-	taskdef, _ := c.ParamSingle("taskdef")
+	taskdefs, _ := c.Param("taskdef")
 
 	parameter, err := api.loadParameter(c)
 	if err != nil {
@@ -136,13 +136,15 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 
 	status := "ok"
 
-	if subdomain == "" || taskdef == "" {
-		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%s",
-			subdomain, taskdef)
+	if subdomain == "" || len(taskdefs) == 0 {
+		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := app.ECS.Launch(subdomain, taskdef, parameter)
-		if err != nil {
-			status = err.Error()
+		for _, taskdef := range taskdefs {
+			err := app.ECS.Launch(subdomain, taskdef, parameter)
+			if err != nil {
+				status = err.Error()
+				break
+			}
 		}
 	}
 
