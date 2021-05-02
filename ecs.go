@@ -135,7 +135,7 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 
 	if infos, err := d.Find(subdomain); err != nil {
 		return err
-	} else if len(infos) > 1 {
+	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
 		err := d.Terminate(subdomain)
 		if err != nil {
