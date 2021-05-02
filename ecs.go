@@ -6,6 +6,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -13,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type Information struct {
@@ -32,16 +34,6 @@ const (
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
 )
-
-type NotFoundError string
-
-func (e NotFoundError) Error() string {
-	return string(e)
-}
-
-func NewNotFoundError(name string) error {
-	return NotFoundError(fmt.Sprintf("%s is not found", name))
-}
 
 type ECS struct {
 	cfg            *Config
@@ -128,16 +120,11 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 	}
 	log.Printf("[debug] Task Override: %s", ov)
 
-	if info, err := d.Find(subdomain); err != nil {
-		switch err.(type) {
-		case NotFoundError:
-			// do nothing
-		default:
-			return err
-		}
-	} else {
-		log.Printf("[info] subdomain %s is already running on task %s. Terminate.", subdomain, info.ID)
-		err := d.Terminate(info.ID)
+	if infos, err := d.Find(subdomain); err != nil {
+		return err
+	} else if len(infos) > 1 {
+		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
+		err := d.Terminate(subdomain)
 		if err != nil {
 			return err
 		}
@@ -159,8 +146,8 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 			Overrides:  ov,
 			Count:      aws.Int64(1),
 			Tags: []*ecs.Tag{
-				&ecs.Tag{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
-				&ecs.Tag{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
+				{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
+				{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
 		},
 	)
@@ -181,15 +168,32 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 }
 
 func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
-	info, err := d.Find(subdomain)
+	infos, err := d.Find(subdomain)
 	if err != nil {
+		return nil, err
+	}
+	if len(infos) == 0 {
 		return nil, fmt.Errorf("subdomain %s is not found", subdomain)
 	}
-	task := info.task
-	if task == nil {
-		return nil, fmt.Errorf("no task for subdomain %s", subdomain)
-	}
 
+	var logs []string
+	var eg errgroup.Group
+	var mu sync.Mutex
+	for _, info := range infos {
+		info := info
+		eg.Go(func() error {
+			l, err := d.logs(info, since, tail)
+			mu.Lock()
+			defer mu.Unlock()
+			logs = append(logs, l...)
+			return err
+		})
+	}
+	return logs, eg.Wait()
+}
+
+func (d *ECS) logs(info Information, since time.Time, tail int) ([]string, error) {
+	task := info.task
 	taskdefOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: task.TaskDefinitionArn,
 		Include:        []*string{aws.String("TAGS")},
@@ -260,24 +264,33 @@ func (d *ECS) Terminate(taskArn string) error {
 }
 
 func (d *ECS) TerminateBySubdomain(subdomain string) error {
-	info, err := d.Find(subdomain)
+	infos, err := d.Find(subdomain)
 	if err != nil {
 		return err
 	}
-	return d.Terminate(info.ID)
+	var eg errgroup.Group
+	for _, info := range infos {
+		info := info
+		eg.Go(func() error {
+			return d.Terminate(info.ID)
+		})
+	}
+	return eg.Wait()
 }
 
-func (d *ECS) Find(subdomain string) (Information, error) {
+func (d *ECS) Find(subdomain string) ([]Information, error) {
+	var results []Information
+
 	infos, err := d.List()
 	if err != nil {
-		return Information{}, err
+		return results, err
 	}
 	for _, info := range infos {
 		if info.SubDomain == subdomain {
-			return info, nil
+			results = append(results, info)
 		}
 	}
-	return Information{}, NewNotFoundError(subdomain)
+	return results, nil
 }
 
 func (d *ECS) List() ([]Information, error) {
@@ -394,7 +407,7 @@ func encodeTagValue(s string) string {
 func decodeTagValue(s string) string {
 	d, err := base64.URLEncoding.DecodeString(s)
 	if err != nil {
-		log.Println("[warn] failed to decode tag value %s %s", s, err)
+		log.Printf("[warn] failed to decode tag value %s %s", s, err)
 		return s
 	}
 	return string(d)

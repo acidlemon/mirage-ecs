@@ -16,6 +16,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.2.2 // indirect
 	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20190310054646-10058d7d4faa // indirect
 	golang.org/x/text v0.3.0 // indirect
 	gopkg.in/acidlemon/rocket.v2 v2.0.0-20150507072438-2f36fbec9709
