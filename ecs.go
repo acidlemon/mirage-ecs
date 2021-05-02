@@ -29,9 +29,9 @@ type Information struct {
 	IPAddress  string    `json:"ipaddress"`
 	Created    time.Time `json:"created"`
 	LastStatus string    `json:"last_status"`
-	Ports      []int     `json:"ports"`
 
-	task *ecs.Task
+	ports []int
+	task  *ecs.Task
 }
 
 const (
@@ -75,6 +75,7 @@ func (d *ECS) updateReverseProxy() {
 			available[info.SubDomain] = true
 			if !rp.Exists(info.SubDomain) && info.LastStatus == "RUNNING" {
 				ports, err := d.portsInTask(info.task)
+				log.Printf("[debug] exposed ports %v in task %s", ports, *info.task.TaskArn)
 				if err != nil {
 					log.Println("[warn] failed to get ports", err)
 					continue
@@ -430,6 +431,7 @@ func (d *ECS) portsInTask(task *ecs.Task) ([]int, error) {
 	tdArn := *task.TaskDefinitionArn
 	td, ok := taskDefinitionCache.Get(tdArn)
 	if !ok {
+		log.Println("[debug] cache miss for", tdArn)
 		out, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: &tdArn,
 		})
