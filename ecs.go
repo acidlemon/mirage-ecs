@@ -13,9 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+var taskDefinitionCache, _ = lru.New(256)
 
 type Information struct {
 	ID         string    `json:"id"`
@@ -26,7 +29,9 @@ type Information struct {
 	IPAddress  string    `json:"ipaddress"`
 	Created    time.Time `json:"created"`
 	LastStatus string    `json:"last_status"`
-	task       *ecs.Task `json:"-"`
+	Ports      []int     `json:"ports"`
+
+	task *ecs.Task
 }
 
 const (
@@ -69,7 +74,14 @@ func (d *ECS) updateReverseProxy() {
 		for _, info := range infos {
 			available[info.SubDomain] = true
 			if !rp.Exists(info.SubDomain) && info.LastStatus == "RUNNING" {
-				rp.AddSubdomain(info.SubDomain, info.IPAddress)
+				ports, err := d.portsInTask(info.task)
+				if err != nil {
+					log.Println("[warn] failed to get ports", err)
+					continue
+				}
+				for _, port := range ports {
+					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
+				}
 			}
 		}
 		for _, subdomain := range rp.Subdomains() {
@@ -411,4 +423,31 @@ func decodeTagValue(s string) string {
 		return s
 	}
 	return string(d)
+}
+
+func (d *ECS) portsInTask(task *ecs.Task) ([]int, error) {
+	var ports []int
+	tdArn := *task.TaskDefinitionArn
+	td, ok := taskDefinitionCache.Get(tdArn)
+	if !ok {
+		out, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
+			TaskDefinition: &tdArn,
+		})
+		if err != nil {
+			return nil, err
+		}
+		taskDefinitionCache.Add(tdArn, out.TaskDefinition)
+		td = out.TaskDefinition
+	}
+	if _td, ok := td.(*ecs.TaskDefinition); ok {
+		for _, c := range _td.ContainerDefinitions {
+			for _, m := range c.PortMappings {
+				if m.HostPort == nil {
+					continue
+				}
+				ports = append(ports, int(*m.HostPort))
+			}
+		}
+	}
+	return ports, nil
 }

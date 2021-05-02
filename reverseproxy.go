@@ -91,19 +91,24 @@ type ProxyInformation struct {
 	proxyHandlers map[int]http.Handler
 }
 
-func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
+func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
 	handlers := make(map[int]http.Handler)
 
 	// create reverse proxy
 	for _, v := range r.cfg.Listen.HTTP {
+		if v.TargetPort != targetPort {
+			continue
+		}
 		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
 		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
 
 		handlers[v.ListenPort] = handler
 	}
-
-	log.Printf("[info] add subdomain: %s -> %s", subdomain, ipaddress)
+	if len(handlers) == 0 {
+		return
+	}
+	log.Printf("[info] add subdomain: %s -> %s:%d", subdomain, ipaddress, targetPort)
 
 	// add to map
 	r.mu.Lock()
