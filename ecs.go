@@ -21,17 +21,17 @@ import (
 var taskDefinitionCache, _ = lru.New(256)
 
 type Information struct {
-	ID         string    `json:"id"`
-	ShortID    string    `json:"short_id"`
-	SubDomain  string    `json:"subdomain"`
-	GitBranch  string    `json:"branch"`
-	Image      string    `json:"image"`
-	IPAddress  string    `json:"ipaddress"`
-	Created    time.Time `json:"created"`
-	LastStatus string    `json:"last_status"`
+	ID         string         `json:"id"`
+	ShortID    string         `json:"short_id"`
+	SubDomain  string         `json:"subdomain"`
+	GitBranch  string         `json:"branch"`
+	TaskDef    string         `json:"taskdef"`
+	IPAddress  string         `json:"ipaddress"`
+	Created    time.Time      `json:"created"`
+	LastStatus string         `json:"last_status"`
+	PortMap    map[string]int `json:"port_map"`
 
-	ports []int
-	task  *ecs.Task
+	task *ecs.Task
 }
 
 const (
@@ -72,17 +72,14 @@ func (d *ECS) updateReverseProxy() {
 		}
 		available := make(map[string]bool)
 		for _, info := range infos {
-			available[info.SubDomain] = true
-			if !rp.Exists(info.SubDomain) && info.LastStatus == "RUNNING" {
-				ports, err := d.portsInTask(info.task)
-				log.Printf("[debug] exposed ports %v in task %s", ports, *info.task.TaskArn)
-				if err != nil {
-					log.Println("[warn] failed to get ports", err)
-					continue
-				}
-				for _, port := range ports {
+			switch info.LastStatus {
+			case "RUNNING":
+				available[info.SubDomain] = true
+				for _, port := range info.PortMap {
 					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
 				}
+			case "STOPPED":
+				available[info.SubDomain] = false
 			}
 		}
 		for _, subdomain := range rp.Subdomains() {
@@ -94,24 +91,8 @@ func (d *ECS) updateReverseProxy() {
 	}
 }
 
-func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string) error {
-	var dockerEnv []*ecs.KeyValuePair
-
-	for _, v := range d.cfg.Parameter {
-		v := v
-		if option[v.Name] == "" {
-			continue
-		}
-		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-			Name:  aws.String(v.Env),
-			Value: aws.String(option[v.Name]),
-		})
-	}
-	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-		Name:  aws.String("SUBDOMAIN"),
-		Value: aws.String(encodeTagValue(subdomain)),
-	})
-
+func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
+	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
 	})
@@ -132,16 +113,6 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 		)
 	}
 	log.Printf("[debug] Task Override: %s", ov)
-
-	if infos, err := d.Find(subdomain); err != nil {
-		return err
-	} else if len(infos) > 0 {
-		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
-		err := d.Terminate(subdomain)
-		if err != nil {
-			return err
-		}
-	}
 
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
@@ -173,11 +144,48 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 			"run task failed. reason:%s arn:%s", *f.Reason, *f.Arn,
 		)
 	}
-
 	task := out.Tasks[0]
 	log.Printf("[info] launced task ARN: %s", *task.TaskArn)
-
 	return nil
+}
+
+func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
+	if infos, err := d.Find(subdomain); err != nil {
+		return err
+	} else if len(infos) > 0 {
+		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
+		err := d.Terminate(subdomain)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Printf("[info] launching subdomain:%s taskdefs:%v", subdomain, taskdefs)
+	var dockerEnv []*ecs.KeyValuePair
+
+	for _, v := range d.cfg.Parameter {
+		v := v
+		if option[v.Name] == "" {
+			continue
+		}
+		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+			Name:  aws.String(v.Env),
+			Value: aws.String(option[v.Name]),
+		})
+	}
+	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+		Name:  aws.String("SUBDOMAIN"),
+		Value: aws.String(encodeTagValue(subdomain)),
+	})
+
+	var eg errgroup.Group
+	for _, taskdef := range taskdefs {
+		taskdef := taskdef
+		eg.Go(func() error {
+			return d.LaunchTask(subdomain, taskdef, dockerEnv)
+		})
+	}
+	return eg.Wait()
 }
 
 func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
@@ -343,10 +351,15 @@ func (d *ECS) List() ([]Information, error) {
 				ShortID:    shortenArn(*task.TaskArn),
 				SubDomain:  decodeTagValue(getTagsFromTask(task, "Subdomain")),
 				GitBranch:  getEnvironmentFromTask(task, "GIT_BRANCH"),
-				Image:      shortenArn(*task.TaskDefinitionArn),
+				TaskDef:    shortenArn(*task.TaskDefinitionArn),
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
 				task:       task,
+			}
+			if portMap, err := d.portMapInTask(task); err != nil {
+				log.Printf("[warn] failed to get portMap in task %s %s", *task.TaskArn, err)
+			} else {
+				info.PortMap = portMap
 			}
 			if task.StartedAt != nil {
 				info.Created = *task.StartedAt
@@ -426,8 +439,8 @@ func decodeTagValue(s string) string {
 	return string(d)
 }
 
-func (d *ECS) portsInTask(task *ecs.Task) ([]int, error) {
-	var ports []int
+func (d *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
+	portMap := make(map[string]int)
 	tdArn := *task.TaskDefinitionArn
 	td, ok := taskDefinitionCache.Get(tdArn)
 	if !ok {
@@ -447,9 +460,9 @@ func (d *ECS) portsInTask(task *ecs.Task) ([]int, error) {
 				if m.HostPort == nil {
 					continue
 				}
-				ports = append(ports, int(*m.HostPort))
+				portMap[*c.Name] = int(*m.HostPort)
 			}
 		}
 	}
-	return ports, nil
+	return portMap, nil
 }
