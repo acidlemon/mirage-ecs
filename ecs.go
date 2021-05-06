@@ -155,6 +155,7 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 				{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
 				{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
+			EnableExecuteCommand: aws.Bool(d.cfg.ECS.EnableExecuteCommand),
 		},
 	)
 	if err != nil {

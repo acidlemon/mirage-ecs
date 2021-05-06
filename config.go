@@ -22,6 +22,7 @@ type ECSCfg struct {
 	LaunchType            string               `yaml:"launch_type"`
 	NetworkConfiguration  NetworkConfiguration `yaml:"network_configuration"`
 	DefaultTaskDefinition string               `yaml:"default_task_definition"`
+	EnableExecuteCommand  bool                 `yaml:"enable_execute_command"`
 }
 
 type NetworkConfiguration struct {
