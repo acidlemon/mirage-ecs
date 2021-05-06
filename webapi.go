@@ -43,7 +43,7 @@ func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *WebApi) List(c rocket.CtxData) {
-	info, err := app.ECS.List()
+	info, err := app.ECS.List(statusRunning)
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
@@ -82,7 +82,7 @@ func (api *WebApi) Terminate(c rocket.CtxData) {
 }
 
 func (api *WebApi) ApiList(c rocket.CtxData) {
-	info, err := app.ECS.List()
+	info, err := app.ECS.List(statusRunning)
 	var status interface{}
 	if err != nil {
 		status = err.Error()

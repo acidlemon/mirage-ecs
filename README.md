@@ -81,6 +81,34 @@ parameters:
 You can add custom parameter. "rule" option is regexp string.
 
 
+### mirage link
+
+mirage link feature enables to launch and terminate multiple tasks that have the same subdomain.
+
+mirage link works as below.
+- Launch API launches multiple tasks that have the same subdomain.
+- mirage-ecs puts to DNS name of these tasks into Route53 hosted zone.
+  -  e.g. `{container-name}.{subdomain}.{hosted-zone} A {tasks IP address}`
+
+For example,
+- hosted zone: `mirage.example.com``
+- First task (IP address 10.1.0.1) has container `proxy`.
+- Second task (IP address 10.2.0.2) has container `app`.
+- Subdomain: `myenv`
+
+mirage-ecs puts the following DNS records.
+- `nginx.myenv.mirage.example.com A 10.1.0.1`
+- `app.myenv.mirage.example.com A 10.2.0.2`
+
+So the proxy container can connect to the app with the DNS name `app.myenv.mirage.example.com`.
+
+To enable mirage link, define your Route53 hosted zone ID in a config.
+
+```yaml
+link:
+  hosted_zone_id: your route53 hosted zone ID
+```
+
 Setup
 ------
 

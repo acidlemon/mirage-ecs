@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
+	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-var taskDefinitionCache, _ = lru.New(256)
+var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskdef is immutable.
 
 type Information struct {
 	ID         string         `json:"id"`
@@ -38,6 +38,9 @@ const (
 	TagManagedBy   = "ManagedBy"
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
+
+	statusRunning = "RUNNING"
+	statusStopped = "STOPPED"
 )
 
 type ECS struct {
@@ -56,38 +59,57 @@ func NewECS(cfg *Config) *ECS {
 		ECS:            ecs.New(sess),
 		CloudWatchLogs: cloudwatchlogs.New(sess),
 	}
-	go ecs.updateReverseProxy()
 	return ecs
 }
 
-func (d *ECS) updateReverseProxy() {
-	log.Println("[debug] starting up ECS.updateReverseProxy()")
+func (d *ECS) Run() {
+	go d.syncToMirage()
+}
+
+func (d *ECS) syncToMirage() {
+	log.Println("[debug] starting up ECS.syncToMirage()")
 	rp := app.ReverseProxy
+	r53 := app.Route53
 	for {
-		infos, err := d.List()
+		time.Sleep(10 * time.Second)
+
+		running, err := d.List(statusRunning)
 		if err != nil {
 			log.Println("[warn]", err)
-			time.Sleep(10 * time.Second)
 			continue
 		}
 		available := make(map[string]bool)
-		for _, info := range infos {
-			switch info.LastStatus {
-			case "RUNNING":
+		for _, info := range running {
+			log.Println("[debug] ruuning task", *info.task.TaskArn)
+			if info.IPAddress != "" {
 				available[info.SubDomain] = true
-				for _, port := range info.PortMap {
+				for name, port := range info.PortMap {
 					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
+					r53.Add(name+"."+info.SubDomain, info.IPAddress)
 				}
-			case "STOPPED":
-				available[info.SubDomain] = false
 			}
 		}
+
+		stopped, err := d.List(statusStopped)
+		if err != nil {
+			log.Println("[warn]", err)
+			continue
+		}
+		for _, info := range stopped {
+			log.Println("[debug] stopped task", *info.task.TaskArn)
+			for name := range info.PortMap {
+				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
+			}
+		}
+
 		for _, subdomain := range rp.Subdomains() {
 			if !available[subdomain] {
 				rp.RemoveSubdomain(subdomain)
 			}
 		}
-		time.Sleep(10 * time.Second)
+		if err := r53.Apply(); err != nil {
+			log.Println("[warn]", err)
+		}
 	}
 }
 
@@ -302,7 +324,7 @@ func (d *ECS) TerminateBySubdomain(subdomain string) error {
 func (d *ECS) Find(subdomain string) ([]Information, error) {
 	var results []Information
 
-	infos, err := d.List()
+	infos, err := d.List(statusRunning)
 	if err != nil {
 		return results, err
 	}
@@ -314,15 +336,17 @@ func (d *ECS) Find(subdomain string) ([]Information, error) {
 	return results, nil
 }
 
-func (d *ECS) List() ([]Information, error) {
+func (d *ECS) List(desiredStatus string) ([]Information, error) {
+	log.Printf("[debug] call ecs.List(%s)", desiredStatus)
 	infos := []Information{}
 	var nextToken *string
 	cluster := aws.String(d.cfg.ECS.Cluster)
 	include := []*string{aws.String("TAGS")}
 	for {
 		listOut, err := d.ECS.ListTasks(&ecs.ListTasksInput{
-			Cluster:   cluster,
-			NextToken: nextToken,
+			Cluster:       cluster,
+			NextToken:     nextToken,
+			DesiredStatus: &desiredStatus,
 		})
 		if err != nil {
 			return infos, errors.Wrap(err, "failed to list tasks")
@@ -442,8 +466,8 @@ func decodeTagValue(s string) string {
 func (d *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
 	portMap := make(map[string]int)
 	tdArn := *task.TaskDefinitionArn
-	td, ok := taskDefinitionCache.Get(tdArn)
-	if !ok {
+	td, err := taskDefinitionCache.Get(tdArn)
+	if err != nil && err == ttlcache.ErrNotFound {
 		log.Println("[debug] cache miss for", tdArn)
 		out, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: &tdArn,
@@ -451,8 +475,10 @@ func (d *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
 		if err != nil {
 			return nil, err
 		}
-		taskDefinitionCache.Add(tdArn, out.TaskDefinition)
+		taskDefinitionCache.Set(tdArn, out.TaskDefinition)
 		td = out.TaskDefinition
+	} else {
+		log.Println("[debug] cache hit for", tdArn)
 	}
 	if _td, ok := td.(*ecs.TaskDefinition); ok {
 		for _, c := range _td.ContainerDefinitions {
