@@ -29,7 +29,9 @@
         <td class="col-md-2">{{ $row.GitBranch }}</td>
         <td class="col-md-2">{{ $row.TaskDef }}</td>
         <td class="col-md-2">{{ $row.ShortID }}</td>
-        <td class="col-md-2">{{ $row.Created.Format "Jan 02, 2006 15:04:05" }}</td>
+        <td class="col-md-2">{{if $row.Created.IsZero}}-
+          {{ else }}{{$row.Created.Format "2006-01-02 15:04:05 MST"}}
+          {{end}}</td>
         <td class="col-md-2">{{ $row.LastStatus }}</td>
         <td class="col-md-2 text-center"><a href="#" class="btn btn-danger" role="button"
             onclick="terminate(&quot;{{ $row.SubDomain }}&quot;)" class="terminate-{{ $row.SubDomain }}">Terminate</a>

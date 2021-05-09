@@ -387,7 +387,7 @@ func (d *ECS) List(desiredStatus string) ([]Information, error) {
 				info.PortMap = portMap
 			}
 			if task.StartedAt != nil {
-				info.Created = *task.StartedAt
+				info.Created = (*task.StartedAt).In(time.Local)
 			}
 			infos = append(infos, info)
 		}
