@@ -26,10 +26,14 @@ type route53Change struct {
 }
 
 func (c *route53Change) String() string {
+	return fmt.Sprintf("%s %s %s", c.action(), c.name, c.value)
+}
+
+func (c *route53Change) action() string {
 	if c.delete {
-		return fmt.Sprintf("delete %s %s", c.name, c.value)
+		return "DELTETE"
 	} else {
-		return fmt.Sprintf("add %s %s", c.name, c.value)
+		return "UPSERT"
 	}
 }
 
@@ -119,9 +123,13 @@ func (r *Route53) Apply() error {
 
 	// sum by name
 	var changes []*route53.Change
+DELETES:
 	for name, cs := range deletes {
 		var records []*route53.ResourceRecord
 		for _, c := range cs {
+			if len(addes[c.name]) > 0 {
+				continue DELETES // skip delete when adds exists
+			}
 			records = append(records, &route53.ResourceRecord{Value: &c.value})
 		}
 		change := &route53.Change{
