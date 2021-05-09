@@ -174,10 +174,10 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 
 func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
 	if infos, err := d.Find(subdomain); err != nil {
-		return err
+		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
 	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
-		err := d.Terminate(subdomain)
+		err := d.TerminateBySubdomain(subdomain)
 		if err != nil {
 			return err
 		}
