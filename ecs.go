@@ -6,42 +6,42 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
+var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskdef is immutable.
+
 type Information struct {
-	ID         string    `json:"id"`
-	ShortID    string    `json:"short_id"`
-	SubDomain  string    `json:"subdomain"`
-	GitBranch  string    `json:"branch"`
-	Image      string    `json:"image"`
-	IPAddress  string    `json:"ipaddress"`
-	Created    time.Time `json:"created"`
-	LastStatus string    `json:"last_status"`
-	task       *ecs.Task `json:"-"`
+	ID         string         `json:"id"`
+	ShortID    string         `json:"short_id"`
+	SubDomain  string         `json:"subdomain"`
+	GitBranch  string         `json:"branch"`
+	TaskDef    string         `json:"taskdef"`
+	IPAddress  string         `json:"ipaddress"`
+	Created    time.Time      `json:"created"`
+	LastStatus string         `json:"last_status"`
+	PortMap    map[string]int `json:"port_map"`
+
+	task *ecs.Task
 }
 
 const (
 	TagManagedBy   = "ManagedBy"
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
+
+	statusRunning = "RUNNING"
+	statusStopped = "STOPPED"
 )
-
-type NotFoundError string
-
-func (e NotFoundError) Error() string {
-	return string(e)
-}
-
-func NewNotFoundError(name string) error {
-	return NotFoundError(fmt.Sprintf("%s is not found", name))
-}
 
 type ECS struct {
 	cfg            *Config
@@ -59,54 +59,62 @@ func NewECS(cfg *Config) *ECS {
 		ECS:            ecs.New(sess),
 		CloudWatchLogs: cloudwatchlogs.New(sess),
 	}
-	go ecs.updateReverseProxy()
 	return ecs
 }
 
-func (d *ECS) updateReverseProxy() {
-	log.Println("[debug] starting up ECS.updateReverseProxy()")
+func (d *ECS) Run() {
+	go d.syncToMirage()
+}
+
+func (d *ECS) syncToMirage() {
+	log.Println("[debug] starting up ECS.syncToMirage()")
 	rp := app.ReverseProxy
+	r53 := app.Route53
 	for {
-		infos, err := d.List()
+		time.Sleep(10 * time.Second)
+
+		running, err := d.List(statusRunning)
 		if err != nil {
 			log.Println("[warn]", err)
-			time.Sleep(10 * time.Second)
 			continue
 		}
 		available := make(map[string]bool)
-		for _, info := range infos {
-			available[info.SubDomain] = true
-			if !rp.Exists(info.SubDomain) && info.LastStatus == "RUNNING" {
-				rp.AddSubdomain(info.SubDomain, info.IPAddress)
+		for _, info := range running {
+			log.Println("[debug] ruuning task", *info.task.TaskArn)
+			if info.IPAddress != "" {
+				available[info.SubDomain] = true
+				for name, port := range info.PortMap {
+					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
+					r53.Add(name+"."+info.SubDomain, info.IPAddress)
+				}
 			}
 		}
+
+		stopped, err := d.List(statusStopped)
+		if err != nil {
+			log.Println("[warn]", err)
+			continue
+		}
+		for _, info := range stopped {
+			log.Println("[debug] stopped task", *info.task.TaskArn)
+			for name := range info.PortMap {
+				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
+			}
+		}
+
 		for _, subdomain := range rp.Subdomains() {
 			if !available[subdomain] {
 				rp.RemoveSubdomain(subdomain)
 			}
 		}
-		time.Sleep(10 * time.Second)
+		if err := r53.Apply(); err != nil {
+			log.Println("[warn]", err)
+		}
 	}
 }
 
-func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string) error {
-	var dockerEnv []*ecs.KeyValuePair
-
-	for _, v := range d.cfg.Parameter {
-		v := v
-		if option[v.Name] == "" {
-			continue
-		}
-		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-			Name:  aws.String(v.Env),
-			Value: aws.String(option[v.Name]),
-		})
-	}
-	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-		Name:  aws.String("SUBDOMAIN"),
-		Value: aws.String(encodeTagValue(subdomain)),
-	})
-
+func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
+	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
 	})
@@ -128,21 +136,6 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 	}
 	log.Printf("[debug] Task Override: %s", ov)
 
-	if info, err := d.Find(subdomain); err != nil {
-		switch err.(type) {
-		case NotFoundError:
-			// do nothing
-		default:
-			return err
-		}
-	} else {
-		log.Printf("[info] subdomain %s is already running on task %s. Terminate.", subdomain, info.ID)
-		err := d.Terminate(info.ID)
-		if err != nil {
-			return err
-		}
-	}
-
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
 		&ecs.RunTaskInput{
@@ -159,9 +152,10 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 			Overrides:  ov,
 			Count:      aws.Int64(1),
 			Tags: []*ecs.Tag{
-				&ecs.Tag{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
-				&ecs.Tag{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
+				{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
+				{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
+			EnableExecuteCommand: aws.Bool(d.cfg.ECS.EnableExecuteCommand),
 		},
 	)
 	if err != nil {
@@ -173,23 +167,77 @@ func (d *ECS) Launch(subdomain string, taskdef string, option map[string]string)
 			"run task failed. reason:%s arn:%s", *f.Reason, *f.Arn,
 		)
 	}
-
 	task := out.Tasks[0]
 	log.Printf("[info] launced task ARN: %s", *task.TaskArn)
-
 	return nil
 }
 
-func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
-	info, err := d.Find(subdomain)
-	if err != nil {
-		return nil, fmt.Errorf("subdomain %s is not found", subdomain)
-	}
-	task := info.task
-	if task == nil {
-		return nil, fmt.Errorf("no task for subdomain %s", subdomain)
+func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
+	if infos, err := d.Find(subdomain); err != nil {
+		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
+	} else if len(infos) > 0 {
+		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
+		err := d.TerminateBySubdomain(subdomain)
+		if err != nil {
+			return err
+		}
 	}
 
+	log.Printf("[info] launching subdomain:%s taskdefs:%v", subdomain, taskdefs)
+	var dockerEnv []*ecs.KeyValuePair
+
+	for _, v := range d.cfg.Parameter {
+		v := v
+		if option[v.Name] == "" {
+			continue
+		}
+		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+			Name:  aws.String(v.Env),
+			Value: aws.String(option[v.Name]),
+		})
+	}
+	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
+		Name:  aws.String("SUBDOMAIN"),
+		Value: aws.String(encodeTagValue(subdomain)),
+	})
+
+	var eg errgroup.Group
+	for _, taskdef := range taskdefs {
+		taskdef := taskdef
+		eg.Go(func() error {
+			return d.LaunchTask(subdomain, taskdef, dockerEnv)
+		})
+	}
+	return eg.Wait()
+}
+
+func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
+	infos, err := d.Find(subdomain)
+	if err != nil {
+		return nil, err
+	}
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("subdomain %s is not found", subdomain)
+	}
+
+	var logs []string
+	var eg errgroup.Group
+	var mu sync.Mutex
+	for _, info := range infos {
+		info := info
+		eg.Go(func() error {
+			l, err := d.logs(info, since, tail)
+			mu.Lock()
+			defer mu.Unlock()
+			logs = append(logs, l...)
+			return err
+		})
+	}
+	return logs, eg.Wait()
+}
+
+func (d *ECS) logs(info Information, since time.Time, tail int) ([]string, error) {
+	task := info.task
 	taskdefOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: task.TaskDefinitionArn,
 		Include:        []*string{aws.String("TAGS")},
@@ -260,35 +308,46 @@ func (d *ECS) Terminate(taskArn string) error {
 }
 
 func (d *ECS) TerminateBySubdomain(subdomain string) error {
-	info, err := d.Find(subdomain)
+	infos, err := d.Find(subdomain)
 	if err != nil {
 		return err
 	}
-	return d.Terminate(info.ID)
+	var eg errgroup.Group
+	for _, info := range infos {
+		info := info
+		eg.Go(func() error {
+			return d.Terminate(info.ID)
+		})
+	}
+	return eg.Wait()
 }
 
-func (d *ECS) Find(subdomain string) (Information, error) {
-	infos, err := d.List()
+func (d *ECS) Find(subdomain string) ([]Information, error) {
+	var results []Information
+
+	infos, err := d.List(statusRunning)
 	if err != nil {
-		return Information{}, err
+		return results, err
 	}
 	for _, info := range infos {
 		if info.SubDomain == subdomain {
-			return info, nil
+			results = append(results, info)
 		}
 	}
-	return Information{}, NewNotFoundError(subdomain)
+	return results, nil
 }
 
-func (d *ECS) List() ([]Information, error) {
+func (d *ECS) List(desiredStatus string) ([]Information, error) {
+	log.Printf("[debug] call ecs.List(%s)", desiredStatus)
 	infos := []Information{}
 	var nextToken *string
 	cluster := aws.String(d.cfg.ECS.Cluster)
 	include := []*string{aws.String("TAGS")}
 	for {
 		listOut, err := d.ECS.ListTasks(&ecs.ListTasksInput{
-			Cluster:   cluster,
-			NextToken: nextToken,
+			Cluster:       cluster,
+			NextToken:     nextToken,
+			DesiredStatus: &desiredStatus,
 		})
 		if err != nil {
 			return infos, errors.Wrap(err, "failed to list tasks")
@@ -317,13 +376,18 @@ func (d *ECS) List() ([]Information, error) {
 				ShortID:    shortenArn(*task.TaskArn),
 				SubDomain:  decodeTagValue(getTagsFromTask(task, "Subdomain")),
 				GitBranch:  getEnvironmentFromTask(task, "GIT_BRANCH"),
-				Image:      shortenArn(*task.TaskDefinitionArn),
+				TaskDef:    shortenArn(*task.TaskDefinitionArn),
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
 				task:       task,
 			}
+			if portMap, err := d.portMapInTask(task); err != nil {
+				log.Printf("[warn] failed to get portMap in task %s %s", *task.TaskArn, err)
+			} else {
+				info.PortMap = portMap
+			}
 			if task.StartedAt != nil {
-				info.Created = *task.StartedAt
+				info.Created = (*task.StartedAt).In(time.Local)
 			}
 			infos = append(infos, info)
 		}
@@ -394,8 +458,38 @@ func encodeTagValue(s string) string {
 func decodeTagValue(s string) string {
 	d, err := base64.URLEncoding.DecodeString(s)
 	if err != nil {
-		log.Println("[warn] failed to decode tag value %s %s", s, err)
+		log.Printf("[warn] failed to decode tag value %s %s", s, err)
 		return s
 	}
 	return string(d)
+}
+
+func (d *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
+	portMap := make(map[string]int)
+	tdArn := *task.TaskDefinitionArn
+	td, err := taskDefinitionCache.Get(tdArn)
+	if err != nil && err == ttlcache.ErrNotFound {
+		log.Println("[debug] cache miss for", tdArn)
+		out, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
+			TaskDefinition: &tdArn,
+		})
+		if err != nil {
+			return nil, err
+		}
+		taskDefinitionCache.Set(tdArn, out.TaskDefinition)
+		td = out.TaskDefinition
+	} else {
+		log.Println("[debug] cache hit for", tdArn)
+	}
+	if _td, ok := td.(*ecs.TaskDefinition); ok {
+		for _, c := range _td.ContainerDefinitions {
+			for _, m := range c.PortMappings {
+				if m.HostPort == nil {
+					continue
+				}
+				portMap[*c.Name] = int(*m.HostPort)
+			}
+		}
+	}
+	return portMap, nil
 }

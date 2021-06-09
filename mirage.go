@@ -16,6 +16,7 @@ type Mirage struct {
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
 	ECS          *ECS
+	Route53      *Route53
 }
 
 func Setup(cfg *Config) {
@@ -24,6 +25,7 @@ func Setup(cfg *Config) {
 		WebApi:       NewWebApi(cfg),
 		ReverseProxy: NewReverseProxy(cfg),
 		ECS:          NewECS(cfg),
+		Route53:      NewRoute53(cfg),
 	}
 
 	app = m
@@ -52,7 +54,7 @@ func Run() {
 			http.Serve(listener, mux)
 		}(v.ListenPort)
 	}
-
+	app.ECS.Run()
 	log.Println("[info] Launch succeeded!")
 
 	wg.Wait()

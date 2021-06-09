@@ -16,13 +16,13 @@ import (
 type ReverseProxy struct {
 	mu        sync.RWMutex
 	cfg       *Config
-	domainMap map[string]ProxyInformation
+	domainMap map[string]proxyHandlers
 }
 
 func NewReverseProxy(cfg *Config) *ReverseProxy {
 	return &ReverseProxy{
 		cfg:       cfg,
-		domainMap: map[string]ProxyInformation{},
+		domainMap: make(map[string]proxyHandlers),
 	}
 }
 
@@ -66,52 +66,81 @@ func (r *ReverseProxy) Subdomains() []string {
 func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	log.Printf("[debug] findHandler for %s:%d", subdomain, port)
 
-	proxyInfo, ok := r.domainMap[subdomain]
+	proxyHandlers, ok := r.domainMap[subdomain]
 	if !ok {
-		for name, info := range r.domainMap {
+		for name, ph := range r.domainMap {
 			if m, _ := path.Match(name, subdomain); m {
-				proxyInfo = info
+				proxyHandlers = ph
 				break
 			}
 		}
-		return nil
+		if proxyHandlers == nil {
+			return nil
+		}
 	}
 
-	handler, ok := proxyInfo.proxyHandlers[port]
+	handler, ok := proxyHandlers.Handler(port)
 	if !ok {
 		return nil
 	}
-
 	return handler
 }
 
-type ProxyInformation struct {
-	IPAddress     string
-	proxyHandlers map[int]http.Handler
+type proxyHandlers map[int]map[string]http.Handler
+
+func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
+	handlers := ph[port]
+	if handlers == nil || len(handlers) == 0 {
+		return nil, false
+	}
+	for _, handler := range ph[port] {
+		return handler, true // return first (randomized by Go's map)
+	}
+	return nil, false
 }
 
-func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string) {
-	handlers := make(map[int]http.Handler)
+func (ph proxyHandlers) Exists(port int, ipaddress string) bool {
+	if ph[port] == nil {
+		return false
+	}
+	return ph[port][ipaddress] != nil
+}
+
+func (ph proxyHandlers) Add(port int, ipaddress string, h http.Handler) {
+	if ph[port] == nil {
+		ph[port] = make(map[string]http.Handler)
+	}
+	ph[port][ipaddress] = h
+}
+
+func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var ph proxyHandlers
+	if _ph, exists := r.domainMap[subdomain]; exists {
+		ph = _ph
+	} else {
+		ph = make(proxyHandlers)
+	}
 
 	// create reverse proxy
 	for _, v := range r.cfg.Listen.HTTP {
+		if v.TargetPort != targetPort {
+			continue
+		}
+		if ph.Exists(v.ListenPort, ipaddress) {
+			continue
+		}
 		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
 		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-
-		handlers[v.ListenPort] = handler
+		ph.Add(v.ListenPort, ipaddress, handler)
+		log.Printf("[info] add subdomain: %s:%d -> %s:%d", subdomain, v.ListenPort, ipaddress, targetPort)
 	}
-
-	log.Printf("[info] add subdomain: %s -> %s", subdomain, ipaddress)
-
-	// add to map
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.domainMap[subdomain] = ProxyInformation{
-		IPAddress:     ipaddress,
-		proxyHandlers: handlers,
-	}
+	r.domainMap[subdomain] = ph
 }
 
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {

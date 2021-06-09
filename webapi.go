@@ -43,7 +43,7 @@ func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *WebApi) List(c rocket.CtxData) {
-	info, err := app.ECS.List()
+	info, err := app.ECS.List(statusRunning)
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
@@ -82,7 +82,7 @@ func (api *WebApi) Terminate(c rocket.CtxData) {
 }
 
 func (api *WebApi) ApiList(c rocket.CtxData) {
-	info, err := app.ECS.List()
+	info, err := app.ECS.List(statusRunning)
 	var status interface{}
 	if err != nil {
 		status = err.Error()
@@ -123,7 +123,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	subdomain, _ := c.ParamSingle("subdomain")
-	taskdef, _ := c.ParamSingle("taskdef")
+	taskdefs, _ := c.Param("taskdef")
 
 	parameter, err := api.loadParameter(c)
 	if err != nil {
@@ -136,11 +136,10 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 
 	status := "ok"
 
-	if subdomain == "" || taskdef == "" {
-		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%s",
-			subdomain, taskdef)
+	if subdomain == "" || len(taskdefs) == 0 {
+		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := app.ECS.Launch(subdomain, taskdef, parameter)
+		err := app.ECS.Launch(subdomain, parameter, taskdefs...)
 		if err != nil {
 			status = err.Error()
 		}

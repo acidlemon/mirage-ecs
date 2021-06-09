@@ -13,6 +13,7 @@ type Config struct {
 	HtmlDir   string    `yaml:"htmldir"`
 	Parameter Paramters `yaml:"parameters"`
 	ECS       ECSCfg    `yaml:"ecs"`
+	Link      Link      `yaml:"link"`
 }
 
 type ECSCfg struct {
@@ -21,6 +22,7 @@ type ECSCfg struct {
 	LaunchType            string               `yaml:"launch_type"`
 	NetworkConfiguration  NetworkConfiguration `yaml:"network_configuration"`
 	DefaultTaskDefinition string               `yaml:"default_task_definition"`
+	EnableExecuteCommand  bool                 `yaml:"enable_execute_command"`
 }
 
 type NetworkConfiguration struct {
@@ -36,6 +38,10 @@ type AwsVpcConfiguration struct {
 type Host struct {
 	WebApi             string `yaml:"webapi"`
 	ReverseProxySuffix string `yaml:"reverse_proxy_suffix"`
+}
+
+type Link struct {
+	HostedZoneID string `yaml:"hosted_zone_id"`
 }
 
 type Listen struct {
