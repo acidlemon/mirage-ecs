@@ -16,3 +16,6 @@ packages:
 
 docker-image:
 	docker build -t mirage-ecs -f docker/Dockerfile .
+
+test:
+	go test -v ./...
