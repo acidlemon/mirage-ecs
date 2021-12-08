@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	mirageecs "github.com/acidlemon/mirage-ecs"
 	"github.com/hashicorp/logutils"
 	"github.com/k0kubun/pp"
 )
@@ -46,14 +47,14 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Printf("[debug] setting log level: %s", *logLevel)
 
-	cfg := NewConfig(*confFile)
+	cfg := mirageecs.NewConfig(*confFile)
 	if showConfig {
 		fmt.Println("mirage config:")
 		pp.Print(cfg)
 		fmt.Println("") // add linebreak
 	}
-	Setup(cfg)
-	Run()
+	mirageecs.Setup(cfg)
+	mirageecs.Run()
 }
 
 func overrideWithEnv(f *flag.Flag) {
