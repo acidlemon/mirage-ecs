@@ -21,15 +21,16 @@ import (
 var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskdef is immutable.
 
 type Information struct {
-	ID         string         `json:"id"`
-	ShortID    string         `json:"short_id"`
-	SubDomain  string         `json:"subdomain"`
-	GitBranch  string         `json:"branch"`
-	TaskDef    string         `json:"taskdef"`
-	IPAddress  string         `json:"ipaddress"`
-	Created    time.Time      `json:"created"`
-	LastStatus string         `json:"last_status"`
-	PortMap    map[string]int `json:"port_map"`
+	ID         string            `json:"id"`
+	ShortID    string            `json:"short_id"`
+	SubDomain  string            `json:"subdomain"`
+	GitBranch  string            `json:"branch"`
+	TaskDef    string            `json:"taskdef"`
+	IPAddress  string            `json:"ipaddress"`
+	Created    time.Time         `json:"created"`
+	LastStatus string            `json:"last_status"`
+	PortMap    map[string]int    `json:"port_map"`
+	Env        map[string]string `json:"env"`
 
 	task *ecs.Task
 }
@@ -379,6 +380,7 @@ func (d *ECS) List(desiredStatus string) ([]Information, error) {
 				TaskDef:    shortenArn(*task.TaskDefinitionArn),
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
+				Env:        getEnvironmentsFromTask(task),
 				task:       task,
 			}
 			if portMap, err := d.portMapInTask(task); err != nil {
@@ -449,6 +451,18 @@ func getEnvironmentFromTask(task *ecs.Task, name string) string {
 		}
 	}
 	return ""
+}
+
+func getEnvironmentsFromTask(task *ecs.Task) map[string]string {
+	env := map[string]string{}
+	if len(task.Overrides.ContainerOverrides) == 0 {
+		return env
+	}
+	ov := task.Overrides.ContainerOverrides[0]
+	for _, e := range ov.Environment {
+		env[*e.Name] = *e.Value
+	}
+	return env
 }
 
 func encodeTagValue(s string) string {
