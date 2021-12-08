@@ -454,11 +454,11 @@ func getEnvironmentFromTask(task *ecs.Task, name string) string {
 }
 
 func getEnvironmentsFromTask(task *ecs.Task) map[string]string {
+	env := map[string]string{}
 	if len(task.Overrides.ContainerOverrides) == 0 {
-		return nil
+		return env
 	}
 	ov := task.Overrides.ContainerOverrides[0]
-	env := map[string]string{}
 	for _, e := range ov.Environment {
 		env[*e.Name] = *e.Value
 	}
