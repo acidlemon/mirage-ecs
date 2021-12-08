@@ -6,7 +6,7 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cmd/mirage-ecs/main.go
+    main: .
     goos:
       - windows
       - darwin
