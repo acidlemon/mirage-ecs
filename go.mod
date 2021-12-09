@@ -1,6 +1,6 @@
 module github.com/acidlemon/mirage-ecs
 
-go 1.12
+go 1.16
 
 require (
 	github.com/ReneKroon/ttlcache/v2 v2.4.0
