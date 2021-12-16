@@ -140,8 +140,9 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
 		&ecs.RunTaskInput{
-			Cluster:        aws.String(d.cfg.ECS.Cluster),
-			TaskDefinition: aws.String(taskdef),
+			CapacityProviderStrategy: d.cfg.ECS.CapacityProviderStrategy,
+			Cluster:                  aws.String(d.cfg.ECS.Cluster),
+			TaskDefinition:           aws.String(taskdef),
 			NetworkConfiguration: &ecs.NetworkConfiguration{
 				AwsvpcConfiguration: &ecs.AwsVpcConfiguration{
 					AssignPublicIp: awsvpcCfg.AssignPublicIp,
@@ -149,7 +150,7 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 					SecurityGroups: awsvpcCfg.SecurityGroups,
 				},
 			},
-			LaunchType: aws.String(d.cfg.ECS.LaunchType),
+			LaunchType: d.cfg.ECS.LaunchType,
 			Overrides:  ov,
 			Count:      aws.Int64(1),
 			Tags: []*ecs.Tag{

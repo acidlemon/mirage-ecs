@@ -4,6 +4,7 @@ import (
 	"log"
 	"regexp"
 
+	"github.com/aws/aws-sdk-go/service/ecs"
 	config "github.com/kayac/go-config"
 )
 
@@ -17,12 +18,13 @@ type Config struct {
 }
 
 type ECSCfg struct {
-	Region                string               `yaml:"region"`
-	Cluster               string               `yaml:"cluster"`
-	LaunchType            string               `yaml:"launch_type"`
-	NetworkConfiguration  NetworkConfiguration `yaml:"network_configuration"`
-	DefaultTaskDefinition string               `yaml:"default_task_definition"`
-	EnableExecuteCommand  bool                 `yaml:"enable_execute_command"`
+	Region                   string                              `yaml:"region"`
+	Cluster                  string                              `yaml:"cluster"`
+	CapacityProviderStrategy []*ecs.CapacityProviderStrategyItem `yaml:"capacity_provider_strategy"`
+	LaunchType               *string                             `yaml:"launch_type"`
+	NetworkConfiguration     NetworkConfiguration                `yaml:"network_configuration"`
+	DefaultTaskDefinition    string                              `yaml:"default_task_definition"`
+	EnableExecuteCommand     bool                                `yaml:"enable_execute_command"`
 }
 
 type NetworkConfiguration struct {
