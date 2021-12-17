@@ -137,27 +137,20 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	}
 	log.Printf("[debug] Task Override: %s", ov)
 
-	awsvpcCfg := d.cfg.ECS.NetworkConfiguration.AwsVpcConfiguration
 	out, err := d.ECS.RunTask(
 		&ecs.RunTaskInput{
-			CapacityProviderStrategy: d.cfg.ECS.CapacityProviderStrategy,
+			CapacityProviderStrategy: d.cfg.ECS.CapacityProviderStrategy.toSDK(),
 			Cluster:                  aws.String(d.cfg.ECS.Cluster),
 			TaskDefinition:           aws.String(taskdef),
-			NetworkConfiguration: &ecs.NetworkConfiguration{
-				AwsvpcConfiguration: &ecs.AwsVpcConfiguration{
-					AssignPublicIp: awsvpcCfg.AssignPublicIp,
-					Subnets:        awsvpcCfg.Subnets,
-					SecurityGroups: awsvpcCfg.SecurityGroups,
-				},
-			},
-			LaunchType: d.cfg.ECS.LaunchType,
-			Overrides:  ov,
-			Count:      aws.Int64(1),
+			NetworkConfiguration:     d.cfg.ECS.NetworkConfiguration.toSDK(),
+			LaunchType:               d.cfg.ECS.LaunchType,
+			Overrides:                ov,
+			Count:                    aws.Int64(1),
 			Tags: []*ecs.Tag{
 				{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
 				{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 			},
-			EnableExecuteCommand: aws.Bool(d.cfg.ECS.EnableExecuteCommand),
+			EnableExecuteCommand: d.cfg.ECS.EnableExecuteCommand,
 		},
 	)
 	if err != nil {

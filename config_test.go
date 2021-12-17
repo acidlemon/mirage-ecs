@@ -25,8 +25,25 @@ listen:
   http:
     - listen: 8080
       target: 5000
-docker:
-  endpoint: unix:///var/run/docker.sock
+ecs:
+  region: ap-northeast-1
+  cluster: test-cluster
+  default_task_definition: test-task-definition
+  capacity_provider_strategy:
+    - capacity_provider: test-strategy
+      base: 1
+      weight: 1
+  enable_execute_command: true
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - subnet-aaaa
+        - subnet-bbbb
+        - subnet-cccc
+      security_groups:
+        - sg-gggg
+      assign_public_ip: ENABLED
+
 storage:
   datadir: ./data
   htmldir: ./html
@@ -57,5 +74,35 @@ parameters:
 
 	if cfg.Parameter[0].Required != true {
 		t.Error("could not parse parameter")
+	}
+
+	if cfg.ECS.Region != "ap-northeast-1" {
+		t.Error("could not parse region")
+	}
+	if cfg.ECS.Cluster != "test-cluster" {
+		t.Error("could not parse cluster")
+	}
+	if cfg.ECS.DefaultTaskDefinition != "test-task-definition" {
+		t.Error("could not parse default_task_definition")
+	}
+	provider := cfg.ECS.CapacityProviderStrategy[0]
+	if *provider.CapacityProvider != "test-strategy" {
+		t.Error("could not parse capacity provider strategy")
+	}
+	if *provider.Base != 1 {
+		t.Error("could not parse capacity provider strategy")
+	}
+	nc := cfg.ECS.NetworkConfiguration
+	if *nc.AwsVpcConfiguration.AssignPublicIp != "ENABLED" {
+		t.Error("could not parse network configuration")
+	}
+	if *nc.AwsVpcConfiguration.SecurityGroups[0] != "sg-gggg" {
+		t.Error("could not parse network configuration")
+	}
+	if *nc.AwsVpcConfiguration.Subnets[0] != "subnet-aaaa" {
+		t.Error("could not parse network configuration")
+	}
+	if !*cfg.ECS.EnableExecuteCommand {
+		t.Error("could not parse enable execute command")
 	}
 }
