@@ -13,6 +13,20 @@ import (
 	"github.com/methane/rproxy"
 )
 
+type proxyAction string
+
+const (
+	proxyAdd    = proxyAction("Add")
+	proxyRemove = proxyAction("Remove")
+)
+
+type proxyControl struct {
+	Action    proxyAction
+	Subdomain string
+	IPAddress string
+	Port      int
+}
+
 type ReverseProxy struct {
 	mu        sync.RWMutex
 	cfg       *Config
@@ -92,7 +106,7 @@ type proxyHandlers map[int]map[string]http.Handler
 
 func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	handlers := ph[port]
-	if handlers == nil || len(handlers) == 0 {
+	if len(handlers) == 0 {
 		return nil, false
 	}
 	for _, handler := range ph[port] {
@@ -101,14 +115,14 @@ func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	return nil, false
 }
 
-func (ph proxyHandlers) Exists(port int, ipaddress string) bool {
+func (ph proxyHandlers) exists(port int, ipaddress string) bool {
 	if ph[port] == nil {
 		return false
 	}
 	return ph[port][ipaddress] != nil
 }
 
-func (ph proxyHandlers) Add(port int, ipaddress string, h http.Handler) {
+func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 	if ph[port] == nil {
 		ph[port] = make(map[string]http.Handler)
 	}
@@ -131,13 +145,13 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		if v.TargetPort != targetPort {
 			continue
 		}
-		if ph.Exists(v.ListenPort, ipaddress) {
+		if ph.exists(v.ListenPort, ipaddress) {
 			continue
 		}
 		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
 		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-		ph.Add(v.ListenPort, ipaddress, handler)
+		ph.add(v.ListenPort, ipaddress, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s:%d", subdomain, v.ListenPort, ipaddress, targetPort)
 	}
 	r.domainMap[subdomain] = ph
@@ -146,6 +160,17 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Println("[info] remove subdomain:", subdomain)
+	log.Println("[info] removing subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
+}
+
+func (r *ReverseProxy) Modify(action *proxyControl) {
+	switch action.Action {
+	case proxyAdd:
+		r.AddSubdomain(action.Subdomain, action.IPAddress, action.Port)
+	case proxyRemove:
+		r.RemoveSubdomain(action.Subdomain)
+	default:
+		log.Printf("[error] unknown proxy action: %s", action.Action)
+	}
 }
