@@ -48,6 +48,8 @@ type ECS struct {
 	cfg            *Config
 	ECS            *ecs.ECS
 	CloudWatchLogs *cloudwatchlogs.CloudWatchLogs
+
+	proxyCh chan *proxyControl
 }
 
 func NewECS(cfg *Config) *ECS {
@@ -59,6 +61,7 @@ func NewECS(cfg *Config) *ECS {
 		cfg:            cfg,
 		ECS:            ecs.New(sess),
 		CloudWatchLogs: cloudwatchlogs.New(sess),
+		proxyCh:        make(chan *proxyControl, 10),
 	}
 	return ecs
 }
@@ -71,8 +74,18 @@ func (d *ECS) syncToMirage() {
 	log.Println("[debug] starting up ECS.syncToMirage()")
 	rp := app.ReverseProxy
 	r53 := app.Route53
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+
+SYNC:
 	for {
-		time.Sleep(10 * time.Second)
+		select {
+		case msg := <-d.proxyCh:
+			log.Printf("[debug] proxyControl %#v", msg)
+			rp.Modify(msg)
+			continue SYNC
+		case <-ticker.C:
+		}
 
 		running, err := d.List(statusRunning)
 		if err != nil {
@@ -308,6 +321,13 @@ func (d *ECS) TerminateBySubdomain(subdomain string) error {
 		return err
 	}
 	var eg errgroup.Group
+	eg.Go(func() error {
+		d.proxyCh <- &proxyControl{
+			Action:    proxyRemove,
+			Subdomain: subdomain,
+		}
+		return nil
+	})
 	for _, info := range infos {
 		info := info
 		eg.Go(func() error {

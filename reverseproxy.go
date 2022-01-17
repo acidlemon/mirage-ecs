@@ -13,6 +13,20 @@ import (
 	"github.com/methane/rproxy"
 )
 
+type proxyAction string
+
+const (
+	proxyAdd    = proxyAction("Add")
+	proxyRemove = proxyAction("Remove")
+)
+
+type proxyControl struct {
+	Action    proxyAction
+	Subdomain string
+	IPAddress string
+	Port      int
+}
+
 type ReverseProxy struct {
 	mu        sync.RWMutex
 	cfg       *Config
@@ -92,7 +106,7 @@ type proxyHandlers map[int]map[string]http.Handler
 
 func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	handlers := ph[port]
-	if handlers == nil || len(handlers) == 0 {
+	if len(handlers) == 0 {
 		return nil, false
 	}
 	for _, handler := range ph[port] {
@@ -118,6 +132,8 @@ func (ph proxyHandlers) Add(port int, ipaddress string, h http.Handler) {
 func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	log.Println("[info] adding subdomain:", subdomain, "to", ipaddress, ":", targetPort)
 
 	var ph proxyHandlers
 	if _ph, exists := r.domainMap[subdomain]; exists {
@@ -146,6 +162,17 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Println("[info] remove subdomain:", subdomain)
+	log.Println("[info] removing subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
+}
+
+func (r *ReverseProxy) Modify(action *proxyControl) {
+	switch action.Action {
+	case proxyAdd:
+		r.AddSubdomain(action.Subdomain, action.IPAddress, action.Port)
+	case proxyRemove:
+		r.RemoveSubdomain(action.Subdomain)
+	default:
+		log.Printf("[error] unknown proxy action: %s", action.Action)
+	}
 }
