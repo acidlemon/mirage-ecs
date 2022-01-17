@@ -115,14 +115,14 @@ func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	return nil, false
 }
 
-func (ph proxyHandlers) Exists(port int, ipaddress string) bool {
+func (ph proxyHandlers) exists(port int, ipaddress string) bool {
 	if ph[port] == nil {
 		return false
 	}
 	return ph[port][ipaddress] != nil
 }
 
-func (ph proxyHandlers) Add(port int, ipaddress string, h http.Handler) {
+func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 	if ph[port] == nil {
 		ph[port] = make(map[string]http.Handler)
 	}
@@ -132,8 +132,6 @@ func (ph proxyHandlers) Add(port int, ipaddress string, h http.Handler) {
 func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	log.Println("[info] adding subdomain:", subdomain, "to", ipaddress, ":", targetPort)
 
 	var ph proxyHandlers
 	if _ph, exists := r.domainMap[subdomain]; exists {
@@ -147,13 +145,13 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		if v.TargetPort != targetPort {
 			continue
 		}
-		if ph.Exists(v.ListenPort, ipaddress) {
+		if ph.exists(v.ListenPort, ipaddress) {
 			continue
 		}
 		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
 		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-		ph.Add(v.ListenPort, ipaddress, handler)
+		ph.add(v.ListenPort, ipaddress, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s:%d", subdomain, v.ListenPort, ipaddress, targetPort)
 	}
 	r.domainMap[subdomain] = ph
