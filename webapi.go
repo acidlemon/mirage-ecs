@@ -58,8 +58,8 @@ func (api *WebApi) List(c rocket.CtxData) {
 
 func (api *WebApi) Launcher(c rocket.CtxData) {
 	c.Render(api.cfg.HtmlDir+"/launcher.html", rocket.RenderVars{
-		"DefaultTaskDefinition": api.cfg.ECS.DefaultTaskDefinition,
-		"Parameters":            api.cfg.Parameter,
+		"DefaultTaskDefinitions": api.cfg.ECS.DefaultTaskDefinitions,
+		"Parameters":             api.cfg.Parameter,
 	})
 }
 

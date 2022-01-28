@@ -23,7 +23,7 @@ type ECSCfg struct {
 	CapacityProviderStrategy CapacityProviderStrategy `yaml:"capacity_provider_strategy"`
 	LaunchType               *string                  `yaml:"launch_type"`
 	NetworkConfiguration     *NetworkConfiguration    `yaml:"network_configuration"`
-	DefaultTaskDefinition    string                   `yaml:"default_task_definition"`
+	DefaultTaskDefinitions   []string                 `yaml:"default_task_definitions"`
 	EnableExecuteCommand     *bool                    `yaml:"enable_execute_command"`
 }
 
