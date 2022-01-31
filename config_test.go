@@ -28,9 +28,7 @@ listen:
 ecs:
   region: ap-northeast-1
   cluster: test-cluster
-  default_task_definitions:
-    - test-task-definition
-    - test-task-definition-link
+  default_task_definition: test-task-definition
   capacity_provider_strategy:
     - capacity_provider: test-strategy
       base: 1
@@ -58,6 +56,12 @@ parameters:
     env: NICK
     rule: "[0-9A-Za-z]{10}"
     required: false
+
+link:
+  hosted_zone_id: Z00000000000000000000
+  default_task_definitions:
+    - test-task-definition
+    - test-task-definition-link
 `
 
 	if err := ioutil.WriteFile(f.Name(), []byte(data), 0644); err != nil {
@@ -84,11 +88,8 @@ parameters:
 	if cfg.ECS.Cluster != "test-cluster" {
 		t.Error("could not parse cluster")
 	}
-	if cfg.ECS.DefaultTaskDefinitions[0] != "test-task-definition" {
-		t.Error("could not parse default_task_definitions")
-	}
-	if cfg.ECS.DefaultTaskDefinitions[1] != "test-task-definition-link" {
-		t.Error("could not parse default_task_definitions")
+	if cfg.ECS.DefaultTaskDefinition != "test-task-definition" {
+		t.Error("could not parse default_task_definition")
 	}
 	provider := cfg.ECS.CapacityProviderStrategy[0]
 	if *provider.CapacityProvider != "test-strategy" {
@@ -109,5 +110,14 @@ parameters:
 	}
 	if !*cfg.ECS.EnableExecuteCommand {
 		t.Error("could not parse enable execute command")
+	}
+	if cfg.Link.HostedZoneID != "Z00000000000000000000" {
+		t.Error("could not parse link hosted zone")
+	}
+	if cfg.Link.DefaultTaskDefinitions[0] != "test-task-definition" {
+		t.Error("could not parse link default task definitions")
+	}
+	if cfg.Link.DefaultTaskDefinitions[1] != "test-task-definition-link" {
+		t.Error("could not parse link default task definitions")
 	}
 }

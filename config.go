@@ -23,7 +23,7 @@ type ECSCfg struct {
 	CapacityProviderStrategy CapacityProviderStrategy `yaml:"capacity_provider_strategy"`
 	LaunchType               *string                  `yaml:"launch_type"`
 	NetworkConfiguration     *NetworkConfiguration    `yaml:"network_configuration"`
-	DefaultTaskDefinitions   []string                 `yaml:"default_task_definitions"`
+	DefaultTaskDefinition    string                   `yaml:"default_task_definition"`
 	EnableExecuteCommand     *bool                    `yaml:"enable_execute_command"`
 }
 
@@ -84,7 +84,8 @@ type Host struct {
 }
 
 type Link struct {
-	HostedZoneID string `yaml:"hosted_zone_id"`
+	HostedZoneID           string   `yaml:"hosted_zone_id"`
+	DefaultTaskDefinitions []string `yaml:"default_task_definitions"`
 }
 
 type Listen struct {
