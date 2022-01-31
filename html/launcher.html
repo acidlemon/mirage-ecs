@@ -22,16 +22,16 @@
 
 {{ if eq $i 0 }}
 
-<label for="taskdef" class="col-md-2 text-right">Task Definitions</label>
+  <label for="taskdef" class="col-md-2 text-right">Task Definitions</label>
 
 {{ else }}
 
-<div class="col-md-2"></div>
+  <div class="col-md-2"></div>
 
 {{ end }}
 
-<input type="text" name="taskdef" value="{{ $taskdef }}" id="taskdef"
-        class="col-md-5" placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp">
+  <input type="text" name="taskdef" value="{{ $taskdef }}" id="taskdef"
+         class="col-md-5" placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp">
   <p class="col-md-5">*Required</p>
 
 {{ end }}
