@@ -18,10 +18,23 @@
 
 {{ end }}
 
-  <label for="taskdef" class="col-md-2 text-right">Task Definition</label>
-  <input type="text" name="taskdef" value="{{ .DefaultTaskDefinition }}" id="taskdef"
+{{ range $i, $taskdef := .DefaultTaskDefinitions }}
+
+{{ if eq $i 0 }}
+
+  <label for="taskdef" class="col-md-2 text-right">Task Definitions</label>
+
+{{ else }}
+
+  <div class="col-md-2"></div>
+
+{{ end }}
+
+  <input type="text" name="taskdef" value="{{ $taskdef }}" id="taskdef"
          class="col-md-5" placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp">
   <p class="col-md-5">*Required</p>
+
+{{ end }}
 
   <p class="col-md-7"></p>
   <p class="col-md-5 text-left">

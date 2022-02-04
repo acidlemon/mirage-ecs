@@ -56,6 +56,12 @@ parameters:
     env: NICK
     rule: "[0-9A-Za-z]{10}"
     required: false
+
+link:
+  hosted_zone_id: Z00000000000000000000
+  default_task_definitions:
+    - test-task-definition
+    - test-task-definition-link
 `
 
 	if err := ioutil.WriteFile(f.Name(), []byte(data), 0644); err != nil {
@@ -104,5 +110,14 @@ parameters:
 	}
 	if !*cfg.ECS.EnableExecuteCommand {
 		t.Error("could not parse enable execute command")
+	}
+	if cfg.Link.HostedZoneID != "Z00000000000000000000" {
+		t.Error("could not parse link hosted zone")
+	}
+	if cfg.Link.DefaultTaskDefinitions[0] != "test-task-definition" {
+		t.Error("could not parse link default task definitions")
+	}
+	if cfg.Link.DefaultTaskDefinitions[1] != "test-task-definition-link" {
+		t.Error("could not parse link default task definitions")
 	}
 }

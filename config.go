@@ -84,7 +84,8 @@ type Host struct {
 }
 
 type Link struct {
-	HostedZoneID string `yaml:"hosted_zone_id"`
+	HostedZoneID           string   `yaml:"hosted_zone_id"`
+	DefaultTaskDefinitions []string `yaml:"default_task_definitions"`
 }
 
 type Listen struct {

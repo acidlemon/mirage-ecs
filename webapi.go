@@ -57,9 +57,15 @@ func (api *WebApi) List(c rocket.CtxData) {
 }
 
 func (api *WebApi) Launcher(c rocket.CtxData) {
+	var taskdefs []string
+	if api.cfg.Link.DefaultTaskDefinitions != nil {
+		taskdefs = api.cfg.Link.DefaultTaskDefinitions
+	} else {
+		taskdefs = []string{api.cfg.ECS.DefaultTaskDefinition}
+	}
 	c.Render(api.cfg.HtmlDir+"/launcher.html", rocket.RenderVars{
-		"DefaultTaskDefinition": api.cfg.ECS.DefaultTaskDefinition,
-		"Parameters":            api.cfg.Parameter,
+		"DefaultTaskDefinitions": taskdefs,
+		"Parameters":             api.cfg.Parameter,
 	})
 }
 
