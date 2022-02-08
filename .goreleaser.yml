@@ -14,6 +14,10 @@ builds:
     goarch:
       - amd64
       - arm64
+archives:
+  - files:
+      - config_sample.yml
+      - html/*
 checksum:
   name_template: "checksums.txt"
 snapshot:
