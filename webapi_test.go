@@ -131,6 +131,7 @@ parameters:
 }
 
 var validSubdomains = []string{
+	"ab",
 	"abc",
 	"a-z",
 	"AB-CD",
@@ -140,7 +141,7 @@ var validSubdomains = []string{
 }
 
 var invalidSubdomains = []string{
-	"aa",
+	"0abc",
 	"a-",
 	"-a",
 	"a.b",
