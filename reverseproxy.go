@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	//	"github.com/acidlemon/go-dumper"
 	"github.com/methane/rproxy"
@@ -16,8 +17,9 @@ import (
 type proxyAction string
 
 const (
-	proxyAdd    = proxyAction("Add")
-	proxyRemove = proxyAction("Remove")
+	proxyAdd             = proxyAction("Add")
+	proxyRemove          = proxyAction("Remove")
+	proxyHandlerLifetime = 30 * time.Second
 )
 
 type proxyControl struct {
@@ -102,15 +104,46 @@ func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
 	return handler
 }
 
-type proxyHandlers map[int]map[string]http.Handler
+type proxyHandler struct {
+	handler http.Handler
+	timer   *time.Timer
+}
+
+func newProxyHandler(h http.Handler) *proxyHandler {
+	return &proxyHandler{
+		handler: h,
+		timer:   time.NewTimer(proxyHandlerLifetime),
+	}
+}
+
+func (h *proxyHandler) alive() bool {
+	select {
+	case <-h.timer.C:
+		return false
+	default:
+		return true
+	}
+}
+
+func (h *proxyHandler) extend() {
+	h.timer.Reset(proxyHandlerLifetime) // extend lifetime
+}
+
+type proxyHandlers map[int]map[string]*proxyHandler
 
 func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	handlers := ph[port]
 	if len(handlers) == 0 {
 		return nil, false
 	}
-	for _, handler := range ph[port] {
-		return handler, true // return first (randomized by Go's map)
+	for ipaddress, handler := range ph[port] {
+		if handler.alive() {
+			// return first (randomized by Go's map)
+			return handler.handler, true
+		} else {
+			log.Printf("[info] proxy handler to %s is dead", ipaddress)
+			delete(ph[port], ipaddress)
+		}
 	}
 	return nil, false
 }
@@ -119,14 +152,25 @@ func (ph proxyHandlers) exists(port int, ipaddress string) bool {
 	if ph[port] == nil {
 		return false
 	}
-	return ph[port][ipaddress] != nil
+	if h := ph[port][ipaddress]; h == nil {
+		return false
+	} else if h.alive() {
+		log.Printf("[debug] proxy handler to %s extends lifetime", ipaddress)
+		h.extend()
+		return true
+	} else {
+		log.Printf("[info] proxy handler to %s is dead", ipaddress)
+		delete(ph[port], ipaddress)
+		return false
+	}
 }
 
 func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 	if ph[port] == nil {
-		ph[port] = make(map[string]http.Handler)
+		ph[port] = make(map[string]*proxyHandler)
 	}
-	ph[port][ipaddress] = h
+	log.Printf("[info] new proxy handler to %s", ipaddress)
+	ph[port][ipaddress] = newProxyHandler(h)
 }
 
 func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
