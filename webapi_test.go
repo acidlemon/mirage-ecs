@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"gopkg.in/acidlemon/rocket.v2"
@@ -127,4 +128,41 @@ parameters:
 		t.Error("Not apply parameter rule")
 	}
 
+}
+
+var validSubdomains = []string{
+	"abc",
+	"a-z",
+	"AB-CD",
+	"a-z-0-9",
+	"a123456789",
+	strings.Repeat("a", 63),
+}
+
+var invalidSubdomains = []string{
+	"aa",
+	"a-",
+	"-a",
+	"a.b",
+	"a+b",
+	"a_b",
+	"a*b",
+	"a^b",
+	"a$b",
+	"a%b",
+	strings.Repeat("a", 64),
+}
+
+func TestValidateSubdomain(t *testing.T) {
+	for _, s := range validSubdomains {
+		if err := validateSubdomain(s); err != nil {
+			t.Errorf("%s should be valid", s)
+		}
+	}
+
+	for _, s := range invalidSubdomains {
+		if err := validateSubdomain(s); err == nil {
+			t.Errorf("%s should be invalid", s)
+		}
+	}
 }

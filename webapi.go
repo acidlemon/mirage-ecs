@@ -1,14 +1,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
 	"gopkg.in/acidlemon/rocket.v2"
 )
+
+var DNSNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]$`)
 
 type WebApi struct {
 	rocket.WebApp
@@ -130,6 +134,12 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 
 	subdomain, _ := c.ParamSingle("subdomain")
 	taskdefs, _ := c.Param("taskdef")
+
+	if err := validateSubdomain(subdomain); err != nil {
+		c.Res().StatusCode = http.StatusBadRequest
+		c.RenderText(err.Error())
+		return rocket.RenderVars{}
+	}
 
 	parameter, err := api.loadParameter(c)
 	if err != nil {
@@ -270,4 +280,14 @@ func randomString(n int) string {
 		b[i] = rsLetters[rand.Intn(len(rsLetters))]
 	}
 	return string(b)
+}
+
+func validateSubdomain(s string) error {
+	if len(s) < 3 || len(s) > 63 {
+		return errors.New("subdomain length must be 3-63")
+	}
+	if !DNSNameRegexp.MatchString(s) {
+		return errors.New("subdomain format is invalid")
+	}
+	return nil
 }
