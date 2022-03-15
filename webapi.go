@@ -1,10 +1,10 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/acidlemon/rocket.v2"
 )
 
-var DNSNameRegexp = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$`)
+var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\[\]]{0,61}[a-zA-Z0-9*?\[\]]$`)
 
 type WebApi struct {
 	rocket.WebApp
@@ -285,8 +285,11 @@ func randomString(n int) string {
 }
 
 func validateSubdomain(s string) error {
-	if !DNSNameRegexp.MatchString(s) {
-		return errors.New("subdomain format is invalid")
+	if !DNSNameRegexpWithPattern.MatchString(s) {
+		return fmt.Errorf("subdomain includes invalid characters")
+	}
+	if _, err := path.Match(s, "x"); err != nil {
+		return err
 	}
 	return nil
 }

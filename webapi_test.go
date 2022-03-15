@@ -137,6 +137,10 @@ var validSubdomains = []string{
 	"AB-CD",
 	"a-z-0-9",
 	"a123456789",
+	"www*",
+	"foo[0-9]",
+	"api-?-test",
+	"*-xxx",
 	strings.Repeat("a", 63),
 }
 
@@ -147,10 +151,11 @@ var invalidSubdomains = []string{
 	"a.b",
 	"a+b",
 	"a_b",
-	"a*b",
 	"a^b",
 	"a$b",
 	"a%b",
+	"www/xxx",
+	"foo[0-9",
 	strings.Repeat("a", 64),
 }
 
