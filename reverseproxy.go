@@ -30,15 +30,17 @@ type proxyControl struct {
 }
 
 type ReverseProxy struct {
-	mu        sync.RWMutex
-	cfg       *Config
-	domainMap map[string]proxyHandlers
+	mu             sync.RWMutex
+	cfg            *Config
+	domainMap      map[string]proxyHandlers
+	accessCounters map[string]*accessCounter
 }
 
 func NewReverseProxy(cfg *Config) *ReverseProxy {
 	return &ReverseProxy{
-		cfg:       cfg,
-		domainMap: make(map[string]proxyHandlers),
+		cfg:            cfg,
+		domainMap:      make(map[string]proxyHandlers),
+		accessCounters: make(map[string]*accessCounter),
 	}
 }
 
@@ -184,6 +186,14 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		ph = make(proxyHandlers)
 	}
 
+	var counter *accessCounter
+	if c, exists := r.accessCounters[subdomain]; exists {
+		counter = c
+	} else {
+		counter = newAccessCounter(time.Minute)
+		r.accessCounters[subdomain] = counter
+	}
+
 	// create reverse proxy
 	for _, v := range r.cfg.Listen.HTTP {
 		if v.TargetPort != targetPort {
@@ -195,6 +205,10 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
 		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
+		handler.Transport = &countingTransport{
+			transport: http.DefaultTransport, // TODO set timeout
+			counter:   counter,
+		}
 		ph.add(v.ListenPort, ipaddress, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s:%d", subdomain, v.ListenPort, ipaddress, targetPort)
 	}
@@ -206,6 +220,7 @@ func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	defer r.mu.Unlock()
 	log.Println("[info] removing subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
+	delete(r.accessCounters, subdomain)
 }
 
 func (r *ReverseProxy) Modify(action *proxyControl) {
@@ -217,4 +232,24 @@ func (r *ReverseProxy) Modify(action *proxyControl) {
 	default:
 		log.Printf("[error] unknown proxy action: %s", action.Action)
 	}
+}
+
+func (r *ReverseProxy) CollectAccessCounters() map[string]map[time.Time]int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	counters := make(map[string]map[time.Time]int64)
+	for subdomain, counter := range r.accessCounters {
+		counters[subdomain] = counter.Collect()
+	}
+	return counters
+}
+
+type countingTransport struct {
+	counter   *accessCounter
+	transport http.RoundTripper
+}
+
+func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.counter.Add()
+	return t.transport.RoundTrip(req)
 }

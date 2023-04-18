@@ -7,6 +7,11 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"golang.org/x/net/context"
 )
 
 var app *Mirage
@@ -16,6 +21,7 @@ type Mirage struct {
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
 	ECS          *ECS
+	CloudWatch   *cloudwatch.CloudWatch
 	Route53      *Route53
 }
 
@@ -55,6 +61,7 @@ func Run() {
 		}(v.ListenPort)
 	}
 	app.ECS.Run()
+	go app.RunAccessCountCollector()
 	log.Println("[info] Launch succeeded!")
 
 	wg.Wait()
@@ -101,4 +108,38 @@ func isSameHost(s1 string, s2 string) bool {
 	lower2 := strings.Trim(strings.ToLower(s2), " ")
 
 	return lower1 == lower2
+}
+
+func (m *Mirage) RunAccessCountCollector() {
+	tk := time.NewTicker(time.Minute)
+	for range tk.C {
+		all := m.ReverseProxy.CollectAccessCounters()
+		pmInput := cloudwatch.PutMetricDataInput{
+			Namespace: aws.String("mirage-ecs"),
+		}
+		for subdomain, counters := range all {
+			for ts, count := range counters {
+				log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
+				pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
+					MetricName: aws.String("access"),
+					Timestamp:  aws.Time(ts),
+					Value:      aws.Float64(float64(count)),
+					Dimensions: []*cloudwatch.Dimension{
+						{
+							Name:  aws.String("subdomain"),
+							Value: aws.String(subdomain),
+						},
+					},
+				})
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if len(pmInput.MetricData) > 0 {
+			_, err := m.CloudWatch.PutMetricDataWithContext(ctx, &pmInput)
+			if err != nil {
+				log.Printf("[error] %s", err)
+			}
+		}
+		cancel()
+	}
 }
