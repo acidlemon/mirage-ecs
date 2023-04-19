@@ -61,7 +61,12 @@ type ECS struct {
 	proxyCh chan *proxyControl
 }
 
-func NewECS(cfg *Config) *ECS {
+func NewECS(cfg *Config) ECSInterface {
+	if cfg.localMode {
+		log.Println("[info] running in local mode with mock ECS.")
+		return NewECSLocal(cfg)
+	}
+
 	sess := session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))

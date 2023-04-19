@@ -24,10 +24,11 @@ func init() {
 
 func main() {
 	confFile := flag.String("conf", "config.yml", "specify config file")
-	var showVersion, showConfig bool
+	var showVersion, showConfig, localMode bool
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.BoolVar(&showConfig, "x", false, "show config")
+	flag.BoolVar(&localMode, "local", false, "local mode (for development)")
 	logLevel := flag.String("log-level", "info", "log level (trace, debug, info, warn, error)")
 	flag.VisitAll(overrideWithEnv)
 	flag.Parse()
@@ -52,6 +53,7 @@ func main() {
 		pp.Print(cfg)
 		fmt.Println("") // add linebreak
 	}
+	cfg.localMode = localMode
 	Setup(cfg)
 	Run()
 }
