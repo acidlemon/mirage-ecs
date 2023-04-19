@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -111,35 +112,43 @@ func isSameHost(s1 string, s2 string) bool {
 }
 
 func (m *Mirage) RunAccessCountCollector() {
-	tk := time.NewTicker(time.Minute)
+	tk := time.NewTicker(m.ReverseProxy.accessCounterUnit)
 	for range tk.C {
 		all := m.ReverseProxy.CollectAccessCounters()
-		pmInput := cloudwatch.PutMetricDataInput{
-			Namespace: aws.String("mirage-ecs"),
+		s, _ := json.Marshal(all)
+		log.Printf("[info] access counters: %s", string(s))
+		if !m.Config.localMode {
+			m.PutAllMetrics(all)
 		}
-		for subdomain, counters := range all {
-			for ts, count := range counters {
-				log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
-				pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
-					MetricName: aws.String("access"),
-					Timestamp:  aws.Time(ts),
-					Value:      aws.Float64(float64(count)),
-					Dimensions: []*cloudwatch.Dimension{
-						{
-							Name:  aws.String("subdomain"),
-							Value: aws.String(subdomain),
-						},
+	}
+}
+
+func (m *Mirage) PutAllMetrics(all map[string]map[time.Time]int64) {
+	pmInput := cloudwatch.PutMetricDataInput{
+		Namespace: aws.String("mirage-ecs"),
+	}
+	for subdomain, counters := range all {
+		for ts, count := range counters {
+			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
+			pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
+				MetricName: aws.String("access"),
+				Timestamp:  aws.Time(ts),
+				Value:      aws.Float64(float64(count)),
+				Dimensions: []*cloudwatch.Dimension{
+					{
+						Name:  aws.String("subdomain"),
+						Value: aws.String(subdomain),
 					},
-				})
-			}
+				},
+			})
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if len(pmInput.MetricData) > 0 {
-			_, err := m.CloudWatch.PutMetricDataWithContext(ctx, &pmInput)
-			if err != nil {
-				log.Printf("[error] %s", err)
-			}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if len(pmInput.MetricData) > 0 {
+		_, err := m.CloudWatch.PutMetricDataWithContext(ctx, &pmInput)
+		if err != nil {
+			log.Printf("[error] %s", err)
 		}
-		cancel()
 	}
 }

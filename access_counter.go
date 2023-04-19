@@ -42,5 +42,6 @@ func (c *accessCounter) Collect() map[time.Time]int64 {
 		r[k] = v
 		delete(c.count, k)
 	}
+	c.count[time.Now().Truncate(c.unit)] = 0 // reset the counter
 	return r
 }

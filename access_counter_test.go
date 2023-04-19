@@ -28,7 +28,9 @@ func TestAccessCounter(t *testing.T) {
 		t.Errorf("could not collect access count %#v", r)
 	}
 	r2 := c.Collect()
-	if len(r2) != 0 {
-		t.Errorf("counter should be empty %#v", r2)
+	for _, v := range r2 {
+		if v != 0 {
+			t.Errorf("counter should be zero %#v", r2)
+		}
 	}
 }

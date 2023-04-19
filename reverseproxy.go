@@ -18,10 +18,11 @@ import (
 type proxyAction string
 
 const (
-	proxyAdd             = proxyAction("Add")
-	proxyRemove          = proxyAction("Remove")
-	proxyHandlerLifetime = 30 * time.Second
+	proxyAdd    = proxyAction("Add")
+	proxyRemove = proxyAction("Remove")
 )
+
+var proxyHandlerLifetime = 30 * time.Second
 
 type proxyControl struct {
 	Action    proxyAction
@@ -31,17 +32,25 @@ type proxyControl struct {
 }
 
 type ReverseProxy struct {
-	mu             sync.RWMutex
-	cfg            *Config
-	domainMap      map[string]proxyHandlers
-	accessCounters map[string]*accessCounter
+	mu                sync.RWMutex
+	cfg               *Config
+	domainMap         map[string]proxyHandlers
+	accessCounters    map[string]*accessCounter
+	accessCounterUnit time.Duration
 }
 
 func NewReverseProxy(cfg *Config) *ReverseProxy {
+	unit := time.Minute
+	if cfg.localMode {
+		unit = time.Second * 10
+		proxyHandlerLifetime = time.Hour * 24 * 365 * 10 // not expire
+		log.Printf("[info] local mode: access counter unit=%s", unit)
+	}
 	return &ReverseProxy{
-		cfg:            cfg,
-		domainMap:      make(map[string]proxyHandlers),
-		accessCounters: make(map[string]*accessCounter),
+		cfg:               cfg,
+		domainMap:         make(map[string]proxyHandlers),
+		accessCounters:    make(map[string]*accessCounter),
+		accessCounterUnit: unit,
 	}
 }
 
@@ -192,7 +201,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 	if c, exists := r.accessCounters[subdomain]; exists {
 		counter = c
 	} else {
-		counter = newAccessCounter(time.Minute)
+		counter = newAccessCounter(r.accessCounterUnit)
 		r.accessCounters[subdomain] = counter
 	}
 
