@@ -18,11 +18,13 @@ func newAccessCounter(unit time.Duration) *accessCounter {
 	if unit == 0 {
 		unit = time.Minute
 	}
-	return &accessCounter{
+	c := &accessCounter{
 		mu:    new(sync.Mutex),
 		count: make(map[time.Time]int64, 2), // 2 is enough for most cases
 		unit:  unit,
 	}
+	c.fill()
+	return c
 }
 
 // Add increments the access counter
@@ -42,6 +44,10 @@ func (c *accessCounter) Collect() map[time.Time]int64 {
 		r[k] = v
 		delete(c.count, k)
 	}
-	c.count[time.Now().Truncate(c.unit)] = 0 // reset the counter
+	c.fill()
 	return r
+}
+
+func (c *accessCounter) fill() {
+	c.count[time.Now().Truncate(c.unit)] = 0
 }

@@ -22,8 +22,8 @@ type Mirage struct {
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
 	ECS          ECSInterface
-	CloudWatch   *cloudwatch.CloudWatch
 	Route53      *Route53
+	CloudWatch   *cloudwatch.CloudWatch
 }
 
 func Setup(cfg *Config) {
@@ -33,6 +33,7 @@ func Setup(cfg *Config) {
 		ReverseProxy: NewReverseProxy(cfg),
 		ECS:          NewECS(cfg),
 		Route53:      NewRoute53(cfg),
+		CloudWatch:   cloudwatch.New(cfg.session),
 	}
 
 	app = m
