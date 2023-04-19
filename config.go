@@ -15,6 +15,8 @@ type Config struct {
 	Parameter Paramters `yaml:"parameters"`
 	ECS       ECSCfg    `yaml:"ecs"`
 	Link      Link      `yaml:"link"`
+
+	localMode bool
 }
 
 type ECSCfg struct {

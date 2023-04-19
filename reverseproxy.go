@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,19 +149,19 @@ func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 	return nil, false
 }
 
-func (ph proxyHandlers) exists(port int, ipaddress string) bool {
+func (ph proxyHandlers) exists(port int, addr string) bool {
 	if ph[port] == nil {
 		return false
 	}
-	if h := ph[port][ipaddress]; h == nil {
+	if h := ph[port][addr]; h == nil {
 		return false
 	} else if h.alive() {
-		log.Printf("[debug] proxy handler to %s extends lifetime", ipaddress)
+		log.Printf("[debug] proxy handler to %s extends lifetime", addr)
 		h.extend()
 		return true
 	} else {
-		log.Printf("[info] proxy handler to %s is dead", ipaddress)
-		delete(ph[port], ipaddress)
+		log.Printf("[info] proxy handler to %s is dead", addr)
+		delete(ph[port], addr)
 		return false
 	}
 }
@@ -176,7 +177,8 @@ func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
+	addr := net.JoinHostPort(ipaddress, strconv.Itoa(targetPort))
+	log.Printf("[debug] AddSubdomain %s -> %s", subdomain, addr)
 	var ph proxyHandlers
 	if _ph, exists := r.domainMap[subdomain]; exists {
 		ph = _ph
@@ -187,16 +189,24 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 	// create reverse proxy
 	for _, v := range r.cfg.Listen.HTTP {
 		if v.TargetPort != targetPort {
+			if !r.cfg.localMode {
+				log.Printf("[warn] target port %d is not defined in config.", targetPort)
+				continue
+			}
+			// local mode allows any port
+		}
+		if ph.exists(v.ListenPort, addr) {
 			continue
 		}
-		if ph.exists(v.ListenPort, ipaddress) {
+		destUrlString := "http://" + addr
+		destUrl, err := url.Parse(destUrlString)
+		if err != nil {
+			log.Printf("[error] invalid destination url: %s %s", destUrlString, err)
 			continue
 		}
-		destUrlString := fmt.Sprintf("http://%s:%d", ipaddress, v.TargetPort)
-		destUrl, _ := url.Parse(destUrlString)
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-		ph.add(v.ListenPort, ipaddress, handler)
-		log.Printf("[info] add subdomain: %s:%d -> %s:%d", subdomain, v.ListenPort, ipaddress, targetPort)
+		ph.add(v.ListenPort, addr, handler)
+		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
 	}
 	r.domainMap[subdomain] = ph
 }

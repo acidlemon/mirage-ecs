@@ -44,6 +44,15 @@ const (
 	statusStopped = "STOPPED"
 )
 
+type ECSInterface interface {
+	Run()
+	Launch(subdomain string, option map[string]string, taskdefs ...string) error
+	Logs(subdomain string, since time.Time, tail int) ([]string, error)
+	Terminate(subdomain string) error
+	TerminateBySubdomain(subdomain string) error
+	List(status string) ([]Information, error)
+}
+
 type ECS struct {
 	cfg            *Config
 	ECS            *ecs.ECS
@@ -52,7 +61,12 @@ type ECS struct {
 	proxyCh chan *proxyControl
 }
 
-func NewECS(cfg *Config) *ECS {
+func NewECS(cfg *Config) ECSInterface {
+	if cfg.localMode {
+		log.Println("[info] running in local mode with mock ECS.")
+		return NewECSLocal(cfg)
+	}
+
 	sess := session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))
@@ -127,7 +141,7 @@ SYNC:
 	}
 }
 
-func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
+func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
 	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
@@ -181,7 +195,7 @@ func (d *ECS) LaunchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 }
 
 func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
-	if infos, err := d.Find(subdomain); err != nil {
+	if infos, err := d.find(subdomain); err != nil {
 		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
 	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
@@ -213,14 +227,14 @@ func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...str
 	for _, taskdef := range taskdefs {
 		taskdef := taskdef
 		eg.Go(func() error {
-			return d.LaunchTask(subdomain, taskdef, dockerEnv)
+			return d.launchTask(subdomain, taskdef, dockerEnv)
 		})
 	}
 	return eg.Wait()
 }
 
 func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
-	infos, err := d.Find(subdomain)
+	infos, err := d.find(subdomain)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +330,7 @@ func (d *ECS) Terminate(taskArn string) error {
 }
 
 func (d *ECS) TerminateBySubdomain(subdomain string) error {
-	infos, err := d.Find(subdomain)
+	infos, err := d.find(subdomain)
 	if err != nil {
 		return err
 	}
@@ -337,7 +351,7 @@ func (d *ECS) TerminateBySubdomain(subdomain string) error {
 	return eg.Wait()
 }
 
-func (d *ECS) Find(subdomain string) ([]Information, error) {
+func (d *ECS) find(subdomain string) ([]Information, error) {
 	var results []Information
 
 	infos, err := d.List(statusRunning)
