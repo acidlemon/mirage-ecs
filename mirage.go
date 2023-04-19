@@ -124,20 +124,64 @@ func (m *Mirage) RunAccessCountCollector() {
 	}
 }
 
+const (
+	CloudWatchMetricNameSpace = "mirage-ecs"
+	CloudWatchMetricName      = "RequestCount"
+	CloudWatchDimensionName   = "subdomain"
+)
+
+func (m *Mirage) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := m.CloudWatch.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{
+		StartTime: aws.Time(time.Now().Add(-duration)),
+		EndTime:   aws.Time(time.Now()),
+		MetricDataQueries: []*cloudwatch.MetricDataQuery{
+			{
+				Id: aws.String("RequestCount"),
+				MetricStat: &cloudwatch.MetricStat{
+					Metric: &cloudwatch.Metric{
+						Dimensions: []*cloudwatch.Dimension{
+							{
+								Name:  aws.String(CloudWatchDimensionName),
+								Value: aws.String(subdomain),
+							},
+						},
+						MetricName: aws.String(CloudWatchMetricName),
+						Namespace:  aws.String(CloudWatchMetricNameSpace),
+					},
+					Period: aws.Int64(int64(duration.Seconds())),
+					Stat:   aws.String("Sum"),
+				},
+			},
+		},
+	})
+	if err != nil {
+		return 0, err
+	}
+	var sum int64
+	for _, v := range res.MetricDataResults {
+		for _, vv := range v.Values {
+			sum += int64(aws.Float64Value(vv))
+		}
+	}
+	return sum, nil
+}
+
 func (m *Mirage) PutAllMetrics(all map[string]map[time.Time]int64) {
 	pmInput := cloudwatch.PutMetricDataInput{
-		Namespace: aws.String("mirage-ecs"),
+		Namespace: aws.String(CloudWatchMetricNameSpace),
 	}
 	for subdomain, counters := range all {
 		for ts, count := range counters {
 			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
 			pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
-				MetricName: aws.String("access"),
+				MetricName: aws.String(CloudWatchMetricName),
 				Timestamp:  aws.Time(ts),
 				Value:      aws.Float64(float64(count)),
 				Dimensions: []*cloudwatch.Dimension{
 					{
-						Name:  aws.String("subdomain"),
+						Name:  aws.String(CloudWatchDimensionName),
 						Value: aws.String(subdomain),
 					},
 				},

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"path"
@@ -37,6 +38,7 @@ func NewWebApi(cfg *Config) *WebApi {
 	app.AddRoute("/api/launch", app.ApiLaunch, view)
 	app.AddRoute("/api/logs", app.ApiLogs, view)
 	app.AddRoute("/api/terminate", app.ApiTerminate, view)
+	app.AddRoute("/api/access", app.ApiAccess, view)
 
 	app.BuildRouter()
 
@@ -126,6 +128,11 @@ func (api *WebApi) ApiTerminate(c rocket.CtxData) {
 	c.RenderJSON(result)
 }
 
+func (api *WebApi) ApiAccess(c rocket.CtxData) {
+	result := api.accessCounter(c)
+	c.RenderJSON(result)
+}
+
 func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	if c.Req().Method != "POST" {
 		c.Res().StatusCode = http.StatusMethodNotAllowed
@@ -159,6 +166,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	} else {
 		err := app.ECS.Launch(subdomain, parameter, taskdefs...)
 		if err != nil {
+			log.Println("[error] launch failed: ", err)
 			status = err.Error()
 		}
 	}
@@ -241,7 +249,7 @@ func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
 			status = err.Error()
 		}
 	} else {
-		status = fmt.Sprintf("parameter required: id")
+		status = "parameter required: id"
 	}
 
 	result := rocket.RenderVars{
@@ -249,6 +257,29 @@ func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	return result
+}
+
+func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
+	subdomain, _ := c.ParamSingle("subdomain")
+	duration, _ := c.ParamSingle("duration")
+	durationInt, _ := strconv.ParseInt(duration, 10, 64)
+	if durationInt == 0 {
+		durationInt = 86400 // 24 hours
+	}
+	d := time.Duration(durationInt) * time.Second
+	sum, err := app.GetAccessCount(subdomain, d)
+	if err != nil {
+		log.Println("[error] access counter failed: ", err)
+		return rocket.RenderVars{
+			"result": err.Error(),
+		}
+	}
+	return rocket.RenderVars{
+		"result":    "ok",
+		"subdomain": subdomain,
+		"duration":  durationInt,
+		"sum":       sum,
+	}
 }
 
 func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
