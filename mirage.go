@@ -15,7 +15,7 @@ type Mirage struct {
 	Config       *Config
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
-	ECS          *ECS
+	ECS          ECSInterface
 	Route53      *Route53
 }
 
