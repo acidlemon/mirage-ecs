@@ -138,7 +138,7 @@ func (m *Mirage) GetAccessCount(subdomain string, duration time.Duration) (int64
 		EndTime:   aws.Time(time.Now()),
 		MetricDataQueries: []*cloudwatch.MetricDataQuery{
 			{
-				Id: aws.String("RequestCount"),
+				Id: aws.String("request_count"),
 				MetricStat: &cloudwatch.MetricStat{
 					Metric: &cloudwatch.Metric{
 						Dimensions: []*cloudwatch.Dimension{
