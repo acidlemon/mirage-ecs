@@ -13,6 +13,7 @@ require (
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
 	github.com/naoina/denco v0.0.0-20180930074809-8475105a6b4c // indirect
 	github.com/pkg/errors v0.9.1
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/acidlemon/rocket.v2 v2.0.0-20150507072438-2f36fbec9709
 )

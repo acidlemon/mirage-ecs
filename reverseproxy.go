@@ -18,10 +18,11 @@ import (
 type proxyAction string
 
 const (
-	proxyAdd             = proxyAction("Add")
-	proxyRemove          = proxyAction("Remove")
-	proxyHandlerLifetime = 30 * time.Second
+	proxyAdd    = proxyAction("Add")
+	proxyRemove = proxyAction("Remove")
 )
+
+var proxyHandlerLifetime = 30 * time.Second
 
 type proxyControl struct {
 	Action    proxyAction
@@ -31,15 +32,25 @@ type proxyControl struct {
 }
 
 type ReverseProxy struct {
-	mu        sync.RWMutex
-	cfg       *Config
-	domainMap map[string]proxyHandlers
+	mu                sync.RWMutex
+	cfg               *Config
+	domainMap         map[string]proxyHandlers
+	accessCounters    map[string]*accessCounter
+	accessCounterUnit time.Duration
 }
 
 func NewReverseProxy(cfg *Config) *ReverseProxy {
+	unit := time.Minute
+	if cfg.localMode {
+		unit = time.Second * 10
+		proxyHandlerLifetime = time.Hour * 24 * 365 * 10 // not expire
+		log.Printf("[info] local mode: access counter unit=%s", unit)
+	}
 	return &ReverseProxy{
-		cfg:       cfg,
-		domainMap: make(map[string]proxyHandlers),
+		cfg:               cfg,
+		domainMap:         make(map[string]proxyHandlers),
+		accessCounters:    make(map[string]*accessCounter),
+		accessCounterUnit: unit,
 	}
 }
 
@@ -186,6 +197,14 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		ph = make(proxyHandlers)
 	}
 
+	var counter *accessCounter
+	if c, exists := r.accessCounters[subdomain]; exists {
+		counter = c
+	} else {
+		counter = newAccessCounter(r.accessCounterUnit)
+		r.accessCounters[subdomain] = counter
+	}
+
 	// create reverse proxy
 	for _, v := range r.cfg.Listen.HTTP {
 		if v.TargetPort != targetPort {
@@ -205,6 +224,10 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 			continue
 		}
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
+		handler.Transport = &countingTransport{
+			transport: http.DefaultTransport, // TODO set timeout
+			counter:   counter,
+		}
 		ph.add(v.ListenPort, addr, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
 	}
@@ -216,6 +239,7 @@ func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	defer r.mu.Unlock()
 	log.Println("[info] removing subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
+	delete(r.accessCounters, subdomain)
 }
 
 func (r *ReverseProxy) Modify(action *proxyControl) {
@@ -227,4 +251,24 @@ func (r *ReverseProxy) Modify(action *proxyControl) {
 	default:
 		log.Printf("[error] unknown proxy action: %s", action.Action)
 	}
+}
+
+func (r *ReverseProxy) CollectAccessCounters() map[string]map[time.Time]int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	counters := make(map[string]map[time.Time]int64)
+	for subdomain, counter := range r.accessCounters {
+		counters[subdomain] = counter.Collect()
+	}
+	return counters
+}
+
+type countingTransport struct {
+	counter   *accessCounter
+	transport http.RoundTripper
+}
+
+func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.counter.Add()
+	return t.transport.RoundTrip(req)
 }

@@ -4,6 +4,8 @@ import (
 	"log"
 	"regexp"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	config "github.com/kayac/go-config"
 )
@@ -17,6 +19,7 @@ type Config struct {
 	Link      Link      `yaml:"link"`
 
 	localMode bool
+	session   *session.Session
 }
 
 type ECSCfg struct {
@@ -138,6 +141,10 @@ func NewConfig(path string) *Config {
 			v.Regexp = *paramRegex
 		}
 	}
+
+	cfg.session = session.Must(session.NewSession(
+		&aws.Config{Region: aws.String(cfg.ECS.Region)},
+	))
 
 	return cfg
 }

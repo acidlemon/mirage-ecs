@@ -11,7 +11,6 @@ import (
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
@@ -67,14 +66,10 @@ func NewECS(cfg *Config) ECSInterface {
 		return NewECSLocal(cfg)
 	}
 
-	sess := session.Must(session.NewSession(
-		&aws.Config{Region: aws.String(cfg.ECS.Region)},
-	))
-
 	ecs := &ECS{
 		cfg:            cfg,
-		ECS:            ecs.New(sess),
-		CloudWatchLogs: cloudwatchlogs.New(sess),
+		ECS:            ecs.New(cfg.session),
+		CloudWatchLogs: cloudwatchlogs.New(cfg.session),
 		proxyCh:        make(chan *proxyControl, 10),
 	}
 	return ecs
