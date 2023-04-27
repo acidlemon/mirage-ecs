@@ -80,6 +80,117 @@ parameters:
 
 You can add custom parameter. "rule" option is regexp string.
 
+### API Documents
+
+#### `GET /api/list`
+
+`/api/list` returns list of running tasks.
+
+```json
+{
+    "result": [
+        {
+            "id": "arn:aws:ecs:ap-northeast-1:12345789012:task/dev/af8e7a6dad6e44d4862696002f41c2dc",
+            "short_id": "af8e7a6dad6e44d4862696002f41c2dc",
+            "subdomain": "b15",
+            "branch": "topic/b15",
+            "taskdef": "dev:756",
+            "ipaddress": "10.206.242.48",
+            "created": "0001-01-01T00:00:00Z",
+            "last_status": "PENDING",
+            "port_map": {
+                "nginx": 80
+            },
+            "env": {
+                "GIT_BRANCH": "topic/b15",
+                "SUBDOMAIN": "YjE1",
+            }
+        },
+        {
+            "id": "arn:aws:ecs:ap-northeast-1:123456789012:task/dev/d007a00bf9a0411ebbcf95291aced40f",
+            "short_id": "d007a00bf9a0411ebbcf95291aced40f",
+            "subdomain": "bench",
+            "branch": "feature/bench",
+            "taskdef": "dev:641",
+            "ipaddress": "10.206.240.60",
+            "created": "2023-03-13T00:29:08.959Z",
+            "last_status": "RUNNING",
+            "port_map": {
+                "nginx": 80
+            },
+            "env": {
+                "GIT_BRANCH": "feature/bench",
+                "SUBDOMAIN": "YmVuY2g=",
+            }
+        }
+    ]
+}
+```
+
+#### `POST /api/launch`
+
+`/api/launch` launches a new task.
+
+Parameters:
+- `subdomain`: subdomain of the task.
+- `branch`: branch name for the task.
+- `taskdef`: ECS task definition name (maybe includes revision) for the task.
+
+```json
+{
+  "status": "ok"
+}
+```
+
+#### `GET /api/logs`
+
+`/api/logs` returns logs of the task.
+
+Parameters:
+- `subdomain`: subdomain of the task.
+- `since`: RFC3339 timestamp of the first log to return.
+- `tail`: number of lines to return or `all`.
+
+```json
+{
+    "result": [
+      "2023/03/13 00:29:08 [notice] 1#1: using the \"epoll\" event method",
+      "2023/03/13 00:29:08 [notice] 1#1: nginx/1.11.10",
+    ]
+}
+```
+
+#### `POST /api/terminate`
+
+`/api/terminate` terminates the task.
+
+Parameters:
+- `subdomain`: subdomain of the task.
+- `id`: task ID of the task.
+
+`subdomain` and `id` are exclusive. If both are specified, `id` is used.
+
+```json
+{
+  "status": "ok"
+}
+```
+
+#### `GET /api/access`
+
+`/api/access` returns access counter of the task.
+
+Parameters:
+- `subdomain`: subdomain of the task.
+- `duration`: duration(seconds) of the counter. default is 86400.
+
+```json
+{
+  "result": "ok",
+  "duration": 86400,
+  "sum": 123
+}
+```
 
 ### mirage link
 

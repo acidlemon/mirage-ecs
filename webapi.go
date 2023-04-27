@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"path"
 	"regexp"
@@ -269,16 +268,16 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 	d := time.Duration(durationInt) * time.Second
 	sum, err := app.GetAccessCount(subdomain, d)
 	if err != nil {
+		c.Res().StatusCode = http.StatusInternalServerError
 		log.Println("[error] access counter failed: ", err)
 		return rocket.RenderVars{
 			"result": err.Error(),
 		}
 	}
 	return rocket.RenderVars{
-		"result":    "ok",
-		"subdomain": subdomain,
-		"duration":  durationInt,
-		"sum":       sum,
+		"result":   "ok",
+		"duration": durationInt,
+		"sum":      sum,
 	}
 }
 
@@ -303,16 +302,6 @@ func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
 	}
 
 	return parameter, nil
-}
-
-const rsLetters = "0123456789abcdef"
-
-func randomString(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = rsLetters[rand.Intn(len(rsLetters))]
-	}
-	return string(b)
 }
 
 func validateSubdomain(s string) error {
