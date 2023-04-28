@@ -30,6 +30,9 @@ type ECSCfg struct {
 	NetworkConfiguration     *NetworkConfiguration    `yaml:"network_configuration"`
 	DefaultTaskDefinition    string                   `yaml:"default_task_definition"`
 	EnableExecuteCommand     *bool                    `yaml:"enable_execute_command"`
+
+	capacityProviderStrategyItems []*ecs.CapacityProviderStrategyItem `yaml:"-"`
+	networkConfiguration          *ecs.NetworkConfiguration           `yaml:"-"`
 }
 
 type CapacityProviderStrategy []*CapacityProviderStrategyItem
@@ -64,6 +67,9 @@ type NetworkConfiguration struct {
 }
 
 func (c *NetworkConfiguration) toSDK() *ecs.NetworkConfiguration {
+	if c == nil {
+		return nil
+	}
 	return &ecs.NetworkConfiguration{
 		AwsvpcConfiguration: c.AwsVpcConfiguration.toSDK(),
 	}
@@ -145,6 +151,8 @@ func NewConfig(path string) *Config {
 	cfg.session = session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))
+	cfg.ECS.capacityProviderStrategyItems = cfg.ECS.CapacityProviderStrategy.toSDK()
+	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
 	return cfg
 }
