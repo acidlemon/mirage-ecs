@@ -204,7 +204,7 @@ See "mirage link" section for details.
 
 mirage link feature enables to launch and terminate multiple tasks that have the same subdomain.
 
-This feature helps launch so many containers that have the same subdomain. (A single ECS task can only start up to 10 containers)
+This feature helps launch so many containers that have the same subdomain. (A single ECS task can only have up to 10 containers)
 
 mirage link works as below.
 - Launch API launches multiple tasks that have the same subdomain.
