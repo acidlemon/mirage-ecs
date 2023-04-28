@@ -12,9 +12,9 @@ Set a single environment variable.
 
 `MIRAGE_DOMAIN=.dev.example.net` (default is `.local`)
 
-1. mirage-ecs accepts HTTP request on "http://mirage.dev.example.net".
+1. mirage-ecs accepts HTTP request on "https://mirage.dev.example.net".
 2. Launch ECS task container specified subdomain by API or Web UI.
-3. Now, you can access to the task using "http://<subdomain>.dev.exmaple.net/".
+3. Now, you can access to the task using "https://<subdomain>.dev.exmaple.net/".
 
 `*.dev.example.net` should be resolved to mirage-ecs webapi.
 
@@ -26,7 +26,7 @@ An example of task definition of mirage-ecs is [ecs-taskdef.json](ecs-taskdef.js
 
 Requirements:
 - `awsvpc` network mode.
-- A public IP address or NAT Gateway to call AWS APIs.
+- A public IP address or NAT Gateway or VPC endpoints to call AWS APIs.
 - IAM Permissions to launch ECS tasks, and report metrics and get logs.
   - `ecs:RunTask`
   - `ecs:DescribeTasks`
@@ -36,13 +36,15 @@ Requirements:
   - `cloudwatch:PutMetricData`
   - `cloudwatch:GetMetricData`
   - `logs:GetLogEvents`
+  - `route53:GetHostedZone` (optional for mirage link)
+  - `route53:ChangeResourceRecordSets` (optional for mirage link)
 
 ### Using CLI
 
 Launch an ECS task using curl.
 
 ```console
-$ curl http://mirage.dev.example.net/api/launch \
+$ curl https://mirage.dev.example.net/api/launch \
   -d subdomain=cool-feature \
   -d branch=feature/cool \
   -d taskdef=myapp
@@ -51,7 +53,7 @@ $ curl http://mirage.dev.example.net/api/launch \
 Terminate the task using curl.
 
 ```console
-$ curl http://mirage.dev.example.net/api/terminate \
+$ curl https://mirage.dev.example.net/api/terminate \
   -d subdomain=cool-feature
 ```
 
@@ -61,13 +63,13 @@ mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://gola
 
 ### Using Web Interface
 
-1. Access to mirage web interface via "http://mirage.dev.example.net/".
+1. Access to mirage web interface via "https://mirage.dev.example.net/".
 1. Press "Launch New Task".
 1. Fill launch options.
-  - subdomain: cool-feature
-  - branch: feature/cool
-  - taskdef: myapp
-1. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
+   - subdomain: cool-feature
+   - branch: feature/cool
+   - taskdef: myapp
+1. Now, you can access to container using "https://cool-feature.dev.exmaple.net/".
 1. Press "Terminate" button.
 
 
@@ -184,6 +186,11 @@ ecs:
       assign_public_ip: ENABLED
 ```
 
+#### `link` section
+
+`link` section configures mirage link.
+
+See "mirage link" section for details.
 
 ## API Documents
 
@@ -303,6 +310,7 @@ mirage link feature enables to launch and terminate multiple tasks that have the
 
 mirage link works as below.
 - Launch API launches multiple tasks that have the same subdomain.
+  - `/api/launch` accepts multiple `taskdef` parameters for each tasks.
 - mirage-ecs puts to DNS name of these tasks into Route53 hosted zone.
   -  e.g. `{container-name}.{subdomain}.{hosted-zone} A {tasks IP address}`
 
