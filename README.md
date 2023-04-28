@@ -22,7 +22,7 @@ Set a single environment variable.
 
 mirage-ecs is designed to work as an ECS service deployed under an Application Load Balancer (ALB).
 
-An example of task definition of mirage-ecs is [ecs-taskdef.json](ecs-taskdef.json).
+An example of task definition of mirage-ecs is [ecs-task-def.json](ecs-task-def.json).
 
 Requirements:
 - `awsvpc` network mode.

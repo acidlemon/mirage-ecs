@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "mirage-ecs",
-      "image": "ghcr.io/acidlemon/mirage-ecs:latest",
+      "image": "ghcr.io/acidlemon/mirage-ecs:v0.7.0",
       "memory": 128,
       "portMappings": [
         {
