@@ -68,7 +68,10 @@ link:
 		t.Error(err)
 	}
 
-	cfg := NewConfig(f.Name())
+	cfg, err := NewConfig(&ConfigParams{Path: f.Name()})
+	if err != nil {
+		t.Error(err)
+	}
 
 	if cfg.Parameter[0].Name != "branch" {
 		t.Error("could not parse parameter")

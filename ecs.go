@@ -159,22 +159,22 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	}
 	log.Printf("[debug] Task Override: %s", ov)
 
-	out, err := d.ECS.RunTask(
-		&ecs.RunTaskInput{
-			CapacityProviderStrategy: d.cfg.ECS.CapacityProviderStrategy.toSDK(),
-			Cluster:                  aws.String(d.cfg.ECS.Cluster),
-			TaskDefinition:           aws.String(taskdef),
-			NetworkConfiguration:     d.cfg.ECS.NetworkConfiguration.toSDK(),
-			LaunchType:               d.cfg.ECS.LaunchType,
-			Overrides:                ov,
-			Count:                    aws.Int64(1),
-			Tags: []*ecs.Tag{
-				{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
-				{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
-			},
-			EnableExecuteCommand: d.cfg.ECS.EnableExecuteCommand,
+	runtaskInput := &ecs.RunTaskInput{
+		CapacityProviderStrategy: d.cfg.ECS.capacityProviderStrategy,
+		Cluster:                  aws.String(d.cfg.ECS.Cluster),
+		TaskDefinition:           aws.String(taskdef),
+		NetworkConfiguration:     d.cfg.ECS.networkConfiguration,
+		LaunchType:               d.cfg.ECS.LaunchType,
+		Overrides:                ov,
+		Count:                    aws.Int64(1),
+		Tags: []*ecs.Tag{
+			{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
+			{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
 		},
-	)
+		EnableExecuteCommand: d.cfg.ECS.EnableExecuteCommand,
+	}
+	log.Printf("[debug] RunTaskInput: %s", runtaskInput)
+	out, err := d.ECS.RunTask(runtaskInput)
 	if err != nil {
 		return err
 	}

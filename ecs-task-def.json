@@ -2,8 +2,7 @@
   "containerDefinitions": [
     {
       "name": "mirage-ecs",
-      "image": "{{ must_env `AWS_ACCOUNT_ID` }}.dkr.ecr.ap-northeast-1.amazonaws.com/mirage-ecs:latest",
-      "cpu": 0,
+      "image": "ghcr.io/acidlemon/mirage-ecs:latest",
       "memory": 128,
       "portMappings": [
         {
@@ -13,7 +12,12 @@
         }
       ],
       "essential": true,
-      "environment": [],
+      "environment": [
+        {
+          "name": "MIRAGE_DOMAIN",
+          "value": ".dev.example.net"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
@@ -25,15 +29,7 @@
     }
   ],
   "family": "mirage-ecs",
-  "taskRoleArn": "arn:aws:iam::{{ must_env `AWS_ACCOUNT_ID` }}:role/{{ must_env `TASK_ROLE_ARN` }}",
-  "executionRoleArn": "arn:aws:iam::{{ must_env `AWS_ACCOUNT_ID` }}:role/{{ must_env `EXECUTION_ROLE_ARN` }}",
-  "networkMode": "awsvpc",
-  "compatibilities": [
-    "EC2",
-    "FARGATE"
-  ],
-  "requiresCompatibilities": [
-    "EC2",
-    "FARGATE"
-  ]
+  "taskRoleArn": "arn:aws:iam::123456789012:role/ecs-task",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecs-task-execution",
+  "networkMode": "awsvpc"
 }

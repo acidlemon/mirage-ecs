@@ -4,13 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/logutils"
-	"github.com/k0kubun/pp"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -18,12 +16,9 @@ var (
 	buildDate string
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func main() {
-	confFile := flag.String("conf", "config.yml", "specify config file")
+	confFile := flag.String("conf", "", "specify config file")
+	domain := flag.String("domain", ".local", "reverse proxy suffix")
 	var showVersion, showConfig, localMode bool
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.BoolVar(&showVersion, "v", false, "show version")
@@ -47,13 +42,18 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Printf("[debug] setting log level: %s", *logLevel)
 
-	cfg := NewConfig(*confFile)
-	if showConfig {
-		fmt.Println("mirage config:")
-		pp.Print(cfg)
-		fmt.Println("") // add linebreak
+	cfg, err := NewConfig(&ConfigParams{
+		Path:      *confFile,
+		LocalMode: localMode,
+		Domain:    *domain,
+	})
+	if err != nil {
+		log.Fatalf("[error] %s", err)
 	}
-	cfg.localMode = localMode
+	if showConfig {
+		yaml.NewEncoder(os.Stdout).Encode(cfg)
+		return
+	}
 	Setup(cfg)
 	Run()
 }

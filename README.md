@@ -1,76 +1,96 @@
-mirage-ecs - reverse proxy frontend for Amazon ECS
-===========================================
+# mirage-ecs - reverse proxy frontend for Amazon ECS
 
 mirage-ecs is reverse proxy for ECS task and task manager.
 
-mirage-ecs can run and stop ECS task and serve http request with specified subdomain. Additionaly, mirage passes variable to containers in task using environment variables.
+mirage-ecs can run and stop an ECS task and serve http request with specified subdomain. Additionaly, mirage passes variable to containers in task using environment variables.
 
-Usage
-------
+## Usage
 
-1. Setup mirage-ecs and edit configuration (see Setup section for detail.)
-2. Run mirage-ecs on ECS cluster.
+### Minimal Configuration
 
-Following instructions use below settings.
+Set a single environment variable.
 
-```
-host:
-  webapi: docker.dev.example.net
-  reverse_proxy_suffix: .dev.example.net
-listen:
-  HTTP: 80
-```
+`MIRAGE_DOMAIN=.dev.example.net` (default is `.local`)
 
-Prerequisite: you should resolve `*.dev.example.net` to your ECS task.
+1. mirage-ecs accepts HTTP request on "https://mirage.dev.example.net".
+2. Launch ECS task container specified subdomain by API or Web UI.
+3. Now, you can access to the task using "https://<subdomain>.dev.exmaple.net/".
 
-### Requirements
+`*.dev.example.net` should be resolved to mirage-ecs webapi.
 
-mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
+### Launch a mirage-ecs on ECS
 
-If your account do not enable these settings yet, you must enable that.
+mirage-ecs is designed to work as an ECS service deployed under an Application Load Balancer (ALB).
 
-```console
-$ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
-```
+An example of task definition of mirage-ecs is [ecs-taskdef.json](ecs-taskdef.json).
+
+Requirements:
+- `awsvpc` network mode.
+- A public IP address or NAT Gateway or VPC endpoints to call AWS APIs.
+- IAM Permissions to launch ECS tasks, and report metrics and get logs.
+  - `ecs:RunTask`
+  - `ecs:DescribeTasks`
+  - `ecs:DescribeTaskDefinition`
+  - `ecs:StopTask`
+  - `ecs:ListTasks`
+  - `cloudwatch:PutMetricData`
+  - `cloudwatch:GetMetricData`
+  - `logs:GetLogEvents`
+  - `route53:GetHostedZone` (optional for mirage link)
+  - `route53:ChangeResourceRecordSets` (optional for mirage link)
 
 ### Using CLI
 
-3. Launch ECS task container using curl.
-```
-curl http://docker.dev.example.net/api/launch \
+Launch an ECS task using curl.
+
+```console
+$ curl https://mirage.dev.example.net/api/launch \
   -d subdomain=cool-feature \
   -d branch=feature/cool \
   -d taskdef=myapp
 ```
-4. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
 
-5. Terminate the task using curl.
-```
-curl http://docker.dev.example.net/api/terminate \
+Terminate the task using curl.
+
+```console
+$ curl https://mirage.dev.example.net/api/terminate \
   -d subdomain=cool-feature
 ```
 
 `subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
-Mirage matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
+
+mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
 
 ### Using Web Interface
 
-3. Access to mirage web interface via "http://docker.dev.example.net/".
-4. Press "Launch New Task".
-5. Fill launch options.
-  - subdomain: cool-feature
-  - branch: feature/cool
-  - taskdef: myapp
-6. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
-7. Press "Terminate" button.
+1. Access to mirage web interface via "https://mirage.dev.example.net/".
+1. Press "Launch New Task".
+1. Fill launch options.
+   - subdomain: cool-feature
+   - branch: feature/cool
+   - taskdef: myapp
+1. Now, you can access to container using "https://cool-feature.dev.exmaple.net/".
+1. Press "Terminate" button.
 
-### Customization
 
-mirage-ecs now supports custom parameter. Write your parameter on config.yml.
+### Full Configuration
 
-mirage-ecs contains default parameter "branch" as below.
+mirage-ecs can be configured by a config file.
 
-```
+Write a YAML file, and specify the file by the `-conf` CLI option or the `MIRAGE_CONF` environment variable.
+
+The default configuration is same as below.
+
+```yaml
+host:
+  webapi: mirage.local
+  reverse_proxy_suffix: .local
+listen:
+  foreign_address: 0.0.0.0
+  http:
+    - listen: 80
+      target: 80
+htmldir: ./html
 parameters:
   - name: branch
     env: GIT_BRANCH
@@ -78,11 +98,142 @@ parameters:
     required: true
 ```
 
-You can add custom parameter. "rule" option is regexp string.
+#### `host` section
 
-### API Documents
+`host` section configures hostname of mirage-ecs webapi and suffix of launched ECS task hostname.
 
-#### `GET /api/list`
+```yaml
+host:
+  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
+  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
+```
+
+#### `listen` section
+
+`listen` section configures port number of mirage-ecs webapi and target ECS task.
+
+```yaml
+listen:
+  http:
+    - listen: 80 # port number of mirage-ecs webapi
+      target: 80 # port number of target ECS task
+```
+
+#### `parameters` section
+
+`parameters` section configures parameters for launched ECS task for subdomains.
+
+The default parameter "branch" as below.
+
+```yaml
+parameters:
+  - name: branch
+    env: GIT_BRANCH
+    rule: ""
+    required: true
+```
+
+You can add any custom parameters. "rule" option is regexp string.
+
+These parameters are passed to ECS task as environment variables.
+
+#### `htmldir` section
+
+`htmldir` section configures directory of mirage-ecs webapi template files.
+
+See [html/](html/) directory for default template files.
+
+Required files are below.
+
+```
+html
+├── launcher.html
+├── layout.html
+└── list.html
+```
+
+#### `ecs` section
+
+mirage-ecs configures `ecs` section automatically based on the ECS service and task of itself.
+
+- `region` is set to `AWS_REGION` enviroment variable.
+- `cluster` and `network_configuration` is set to same as the ECS service.
+- `launch_type` is set to `FARGATE`.
+- `enable_execute_command` is set to `true`.
+- `capacity_provider_strategy` is set to null.
+  - If you want to use capacity provider, write the `ecs` section and remove `launch_type`.
+- `default_task_definition` is not set.
+  - Need to specify the task definition name when launching a task.
+
+If you want to partially override the settings, write the `ecs` section.
+
+```yaml
+ecs:
+  region: "ap-northeast-1"
+  cluster: mycluster
+  default_task_definition: myapp
+  enable_execute_command: true
+  launch_type: FARGATE
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - subnet-aaaa0000
+        - subnet-bbbb1111
+        - subnet-cccc2222
+      security_groups:
+        - sg-11112222
+        - sg-aaaagggg
+      assign_public_ip: ENABLED
+```
+
+#### `link` section
+
+`link` section configures mirage link.
+
+```yaml
+link:
+  hosted_zone_id: ZZZZZZZZZZZZZZ  # Route53 hosted zone ID
+  default_task_definitions:
+    - frontend-taskdef
+    - backend-taskdef
+```
+
+See "mirage link" section for details.
+
+## mirage link
+
+mirage link feature enables to launch and terminate multiple tasks that have the same subdomain.
+
+This feature helps launch so many containers that have the same subdomain. (A single ECS task can only have up to 10 containers)
+
+mirage link works as below.
+- Launch API launches multiple tasks that have the same subdomain.
+  - `/api/launch` accepts multiple `taskdef` parameters for each tasks.
+- mirage-ecs puts to DNS name of these tasks into Route53 hosted zone.
+  -  e.g. `{container-name}.{subdomain}.{hosted-zone} A {tasks IP address}`
+
+For example,
+- hosted zone: `mirage.example.com``
+- First task (IP address 10.1.0.1) has container `proxy`.
+- Second task (IP address 10.2.0.2) has container `app`.
+- Subdomain: `myenv`
+
+mirage-ecs puts the following DNS records.
+- `nginx.myenv.mirage.example.com A 10.1.0.1`
+- `app.myenv.mirage.example.com A 10.2.0.2`
+
+So the proxy container can connect to the app with the DNS name `app.myenv.mirage.example.com`.
+
+To enable mirage link, define your Route53 hosted zone ID in a config.
+
+```yaml
+link:
+  hosted_zone_id: your route53 hosted zone ID
+```
+
+## API Documents
+
+### `GET /api/list`
 
 `/api/list` returns list of running tasks.
 
@@ -127,7 +278,7 @@ You can add custom parameter. "rule" option is regexp string.
 }
 ```
 
-#### `POST /api/launch`
+### `POST /api/launch`
 
 `/api/launch` launches a new task.
 
@@ -160,7 +311,7 @@ Parameters:
 }
 ```
 
-#### `POST /api/terminate`
+### `POST /api/terminate`
 
 `/api/terminate` terminates the task.
 
@@ -176,7 +327,7 @@ Parameters:
 }
 ```
 
-#### `GET /api/access`
+### `GET /api/access`
 
 `/api/access` returns access counter of the task.
 
@@ -192,45 +343,15 @@ Parameters:
 }
 ```
 
-### mirage link
+## Requirements
 
-mirage link feature enables to launch and terminate multiple tasks that have the same subdomain.
+mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
 
-mirage link works as below.
-- Launch API launches multiple tasks that have the same subdomain.
-- mirage-ecs puts to DNS name of these tasks into Route53 hosted zone.
-  -  e.g. `{container-name}.{subdomain}.{hosted-zone} A {tasks IP address}`
+If your account do not enable these settings yet, you must enable that.
 
-For example,
-- hosted zone: `mirage.example.com``
-- First task (IP address 10.1.0.1) has container `proxy`.
-- Second task (IP address 10.2.0.2) has container `app`.
-- Subdomain: `myenv`
-
-mirage-ecs puts the following DNS records.
-- `nginx.myenv.mirage.example.com A 10.1.0.1`
-- `app.myenv.mirage.example.com A 10.2.0.2`
-
-So the proxy container can connect to the app with the DNS name `app.myenv.mirage.example.com`.
-
-To enable mirage link, define your Route53 hosted zone ID in a config.
-
-```yaml
-link:
-  hosted_zone_id: your route53 hosted zone ID
+```console
+$ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
 ```
-
-Setup
-------
-
-In docker/ directory,
-
-1. Edit `config.yml` to your environment.
-1. Do `make` to create a docker image.
-1. Push the image to ECR.
-1. Put mirage-ecs task definition to ECS.
-   - See also [mirage-ecs-taskdef.json](mirage-ecs-taskdef.json)
-1. Run mirage-ecs service in your ECS.
 
 License
 --------
