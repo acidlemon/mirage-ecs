@@ -162,13 +162,15 @@ func NewConfig(path string) *Config {
 	// default config
 	cfg := &Config{
 		Host: Host{
-			WebApi:             "localhost",
+			WebApi:             "mirage.dev.example.net",
 			ReverseProxySuffix: ".dev.example.net",
 		},
 		Listen: Listen{
-			ForeignAddress: "127.0.0.1",
-			HTTP:           []PortMap{},
-			HTTPS:          []PortMap{},
+			ForeignAddress: "0.0.0.0",
+			HTTP: []PortMap{
+				{ListenPort: 80, TargetPort: 80},
+			},
+			HTTPS: []PortMap{},
 		},
 		HtmlDir: "./html",
 	}

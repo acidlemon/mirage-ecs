@@ -1,76 +1,59 @@
-mirage-ecs - reverse proxy frontend for Amazon ECS
-===========================================
+# mirage-ecs - reverse proxy frontend for Amazon ECS
 
 mirage-ecs is reverse proxy for ECS task and task manager.
 
-mirage-ecs can run and stop ECS task and serve http request with specified subdomain. Additionaly, mirage passes variable to containers in task using environment variables.
+mirage-ecs can run and stop an ECS task and serve http request with specified subdomain. Additionaly, mirage passes variable to containers in task using environment variables.
 
-Usage
-------
+## Usage
 
-1. Setup mirage-ecs and edit configuration (see Setup section for detail.)
-2. Run mirage-ecs on ECS cluster.
+Build mirage-ecs container with a configuration file. (default `config.yaml`)
 
-Following instructions use below settings.
+Run mirage-ecs as ECS service.
 
-```
+### Minimal Configuration
+
+```yaml
 host:
-  webapi: docker.dev.example.net
-  reverse_proxy_suffix: .dev.example.net
+  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
+  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
+```
+
+1. mirage-ecs accepts HTTP request on "http://mirage.dev.example.net".
+2. Launch ECS task container specified subdomain.
+3. Now, you can access to the task using "http://<subdomain>.dev.exmaple.net/".
+
+`*.dev.example.net` should be resolved to mirage-ecs webapi.
+
+### Full Configuration
+
+#### `host` section
+
+`host` section configures hostname of mirage-ecs webapi and suffix of launched ECS task hostname.
+
+```yaml
+host:
+  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
+  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
+```
+
+#### `listen` section
+
+`listen` section configures port number of mirage-ecs webapi and target ECS task.
+
+```yaml
 listen:
-  HTTP: 80
+  http:
+    - listen: 80 # port number of mirage-ecs webapi
+      target: 80 # port number of target ECS task
 ```
 
-Prerequisite: you should resolve `*.dev.example.net` to your ECS task.
+#### `parameters` section
 
-### Requirements
+`parameters` section configures parameters for ECS task.
 
-mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
+The default parameter "branch" as below.
 
-If your account do not enable these settings yet, you must enable that.
-
-```console
-$ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
-```
-
-### Using CLI
-
-3. Launch ECS task container using curl.
-```
-curl http://docker.dev.example.net/api/launch \
-  -d subdomain=cool-feature \
-  -d branch=feature/cool \
-  -d taskdef=myapp
-```
-4. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
-
-5. Terminate the task using curl.
-```
-curl http://docker.dev.example.net/api/terminate \
-  -d subdomain=cool-feature
-```
-
-`subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
-Mirage matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
-
-### Using Web Interface
-
-3. Access to mirage web interface via "http://docker.dev.example.net/".
-4. Press "Launch New Task".
-5. Fill launch options.
-  - subdomain: cool-feature
-  - branch: feature/cool
-  - taskdef: myapp
-6. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
-7. Press "Terminate" button.
-
-### Customization
-
-mirage-ecs now supports custom parameter. Write your parameter on config.yml.
-
-mirage-ecs contains default parameter "branch" as below.
-
-```
+```yaml
 parameters:
   - name: branch
     env: GIT_BRANCH
@@ -78,7 +61,65 @@ parameters:
     required: true
 ```
 
-You can add custom parameter. "rule" option is regexp string.
+You can add any custom parameters. "rule" option is regexp string.
+
+These parameters are passed to ECS task as environment variables.
+
+#### `ecs` section
+
+mirage-ecs configures `ecs:` section automatically based on the ECS service and task of itself.
+
+If you want to partially override the settings, write the `ecs:` section.
+
+```yaml
+ecs:
+  region: "ap-northeast-1"
+  cluster: mycluster
+  launch_type: FARGATE
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - subnet-aaaa0000
+        - subnet-bbbb1111
+        - subnet-cccc2222
+      security_groups:
+        - sg-11112222
+        - sg-aaaagggg
+      assign_public_ip: ENABLED
+```
+
+### Using CLI
+
+Launch ECS task container using curl.
+
+```console
+$ curl http://mirage.dev.example.net/api/launch \
+  -d subdomain=cool-feature \
+  -d branch=feature/cool \
+  -d taskdef=myapp
+```
+
+Terminate the task using curl.
+
+```console
+$ curl http://mirage.dev.example.net/api/terminate \
+  -d subdomain=cool-feature
+```
+
+`subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
+
+mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
+
+### Using Web Interface
+
+1. Access to mirage web interface via "http://mirage.dev.example.net/".
+1. Press "Launch New Task".
+1. Fill launch options.
+  - subdomain: cool-feature
+  - branch: feature/cool
+  - taskdef: myapp
+1. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
+1. Press "Terminate" button.
 
 ### API Documents
 
@@ -231,6 +272,17 @@ In docker/ directory,
 1. Put mirage-ecs task definition to ECS.
    - See also [mirage-ecs-taskdef.json](mirage-ecs-taskdef.json)
 1. Run mirage-ecs service in your ECS.
+
+
+### Requirements
+
+mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
+
+If your account do not enable these settings yet, you must enable that.
+
+```console
+$ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
+```
 
 License
 --------
