@@ -1,12 +1,19 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"regexp"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	metadata "github.com/brunoscheufler/aws-ecs-metadata-go"
 	config "github.com/kayac/go-config"
 )
 
@@ -31,8 +38,38 @@ type ECSCfg struct {
 	DefaultTaskDefinition    string                   `yaml:"default_task_definition"`
 	EnableExecuteCommand     *bool                    `yaml:"enable_execute_command"`
 
-	capacityProviderStrategyItems []*ecs.CapacityProviderStrategyItem `yaml:"-"`
-	networkConfiguration          *ecs.NetworkConfiguration           `yaml:"-"`
+	capacityProviderStrategy []*ecs.CapacityProviderStrategyItem `yaml:"-"`
+	networkConfiguration     *ecs.NetworkConfiguration           `yaml:"-"`
+}
+
+func (c ECSCfg) String() string {
+	m := map[string]interface{}{
+		"region":                     c.Region,
+		"cluster":                    c.Cluster,
+		"capacity_provider_strategy": c.capacityProviderStrategy,
+		"launch_type":                c.LaunchType,
+		"network_configuration":      c.networkConfiguration,
+		"default_task_definition":    c.DefaultTaskDefinition,
+		"enable_execute_command":     c.EnableExecuteCommand,
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func (c ECSCfg) valid() bool {
+	if c.Region == "" {
+		return false
+	}
+	if c.Cluster == "" {
+		return false
+	}
+	if c.LaunchType == nil && c.capacityProviderStrategy == nil {
+		return false
+	}
+	if c.networkConfiguration == nil {
+		return false
+	}
+	return true
 }
 
 type CapacityProviderStrategy []*CapacityProviderStrategyItem
@@ -151,8 +188,89 @@ func NewConfig(path string) *Config {
 	cfg.session = session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))
-	cfg.ECS.capacityProviderStrategyItems = cfg.ECS.CapacityProviderStrategy.toSDK()
+	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
+	if err := cfg.fillECSDefaults(context.TODO()); err != nil {
+		log.Printf("[warn] failed to fill ECS defaults: %s", err)
+	}
 	return cfg
+}
+
+func (c *Config) fillECSDefaults(ctx context.Context) error {
+	defer func() {
+		if c.ECS.valid() {
+			log.Printf("[info] built ECS config: %s", c.ECS)
+		} else {
+			log.Printf("[error] invalid ECS config: %s", c.ECS)
+			log.Println("[error] ECS config is invalid, so you may not be able to launch ECS tasks")
+		}
+	}()
+	if c.ECS.Region == "" {
+		c.ECS.Region = os.Getenv("AWS_REGION")
+		log.Printf("[info] AWS_REGION is not set, using region=%s", c.ECS.Region)
+	}
+	if c.ECS.LaunchType == nil && c.ECS.CapacityProviderStrategy == nil {
+		launchType := "FARGATE"
+		c.ECS.LaunchType = &launchType
+		log.Printf("[info] launch_type and capacity_provider_strategy are not set, using launch_type=%s", *c.ECS.LaunchType)
+	}
+	if c.ECS.EnableExecuteCommand == nil {
+		enableExecuteCommand := true
+		c.ECS.EnableExecuteCommand = &enableExecuteCommand
+		log.Printf("[info] enable_execute_command is not set, using enable_execute_command=%t", *c.ECS.EnableExecuteCommand)
+	}
+
+	meta, err := metadata.Get(ctx, &http.Client{})
+	if err != nil {
+		return err
+		/*
+			for local debugging
+			meta = &metadata.TaskMetadataV4{
+				Cluster: "your test cluster",
+				TaskARN: "your test task arn running on the cluster",
+			}
+		*/
+	}
+	log.Printf("[debug] task metadata: %v", meta)
+	var cluster, taskArn, service string
+	switch m := meta.(type) {
+	case *metadata.TaskMetadataV3:
+		cluster = m.Cluster
+		taskArn = m.TaskARN
+	case *metadata.TaskMetadataV4:
+		cluster = m.Cluster
+		taskArn = m.TaskARN
+	}
+
+	svc := ecs.New(c.session)
+	if out, err := svc.DescribeTasksWithContext(ctx, &ecs.DescribeTasksInput{
+		Cluster: aws.String(cluster),
+		Tasks:   []*string{&taskArn},
+	}); err != nil {
+		return err
+	} else {
+		if len(out.Tasks) == 0 {
+			return fmt.Errorf("cannot find task: %s", taskArn)
+		}
+		group := aws.StringValue(out.Tasks[0].Group)
+		if strings.HasPrefix(group, "service:") {
+			service = group[8:]
+		}
+	}
+	if out, err := svc.DescribeServicesWithContext(ctx, &ecs.DescribeServicesInput{
+		Cluster:  aws.String(cluster),
+		Services: []*string{&service},
+	}); err != nil {
+		return err
+	} else {
+		if len(out.Services) == 0 {
+			return fmt.Errorf("cannot find service: %s", service)
+		}
+		if c.ECS.networkConfiguration == nil {
+			c.ECS.networkConfiguration = out.Services[0].NetworkConfiguration
+			log.Printf("[info] network_configuration is not set, using network_configuration=%v", c.ECS.networkConfiguration)
+		}
+	}
+	return nil
 }

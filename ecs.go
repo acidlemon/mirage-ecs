@@ -160,7 +160,7 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	log.Printf("[debug] Task Override: %s", ov)
 
 	runtaskInput := &ecs.RunTaskInput{
-		CapacityProviderStrategy: d.cfg.ECS.capacityProviderStrategyItems,
+		CapacityProviderStrategy: d.cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(d.cfg.ECS.Cluster),
 		TaskDefinition:           aws.String(taskdef),
 		NetworkConfiguration:     d.cfg.ECS.networkConfiguration,
