@@ -15,7 +15,10 @@ packages:
 	goreleaser release --rm-dist --snapshot --skip-publish
 
 docker-image:
-	docker build -t mirage-ecs -f docker/Dockerfile .
+	docker build -t ghcr.io/acidlemon/mirage-ecs:$(GIT_VER) -f docker/Dockerfile .
+
+push-image: docker-image
+	docker push ghcr.io/acidlemon/mirage-ecs:$(GIT_VER)
 
 test:
 	go test -v ./...
