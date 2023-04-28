@@ -17,13 +17,20 @@ import (
 	config "github.com/kayac/go-config"
 )
 
+var DefaultParameter = &Parameter{
+	Name:     "branch",
+	Env:      "GIT_BRANCH",
+	Rule:     "",
+	Required: true,
+}
+
 type Config struct {
-	Host      Host      `yaml:"host"`
-	Listen    Listen    `yaml:"listen"`
-	HtmlDir   string    `yaml:"htmldir"`
-	Parameter Paramters `yaml:"parameters"`
-	ECS       ECSCfg    `yaml:"ecs"`
-	Link      Link      `yaml:"link"`
+	Host      Host       `yaml:"host"`
+	Listen    Listen     `yaml:"listen"`
+	HtmlDir   string     `yaml:"htmldir"`
+	Parameter Parameters `yaml:"parameters"`
+	ECS       ECSCfg     `yaml:"ecs"`
+	Link      Link       `yaml:"link"`
 
 	localMode bool
 	session   *session.Session
@@ -137,9 +144,9 @@ type Link struct {
 }
 
 type Listen struct {
-	ForeignAddress string    `yaml:"foreign_address"`
-	HTTP           []PortMap `yaml:"http"`
-	HTTPS          []PortMap `yaml:"https"`
+	ForeignAddress string    `yaml:"foreign_address,omitempty"`
+	HTTP           []PortMap `yaml:"http,omitempty"`
+	HTTPS          []PortMap `yaml:"https,omitempty"`
 }
 
 type PortMap struct {
@@ -148,41 +155,73 @@ type PortMap struct {
 }
 
 type Parameter struct {
-	Name     string `yaml:"name"`
-	Env      string `yaml:"env"`
-	Rule     string `yaml:"rule"`
-	Required bool   `yaml:"required"`
-	Regexp   regexp.Regexp
+	Name     string        `yaml:"name"`
+	Env      string        `yaml:"env"`
+	Rule     string        `yaml:"rule"`
+	Required bool          `yaml:"required"`
+	Regexp   regexp.Regexp `yaml:"-"`
 }
 
-type Paramters []*Parameter
+type Parameters []*Parameter
 
-func NewConfig(path string) *Config {
-	log.Printf("[info] loading config file: %s", path)
+type ConfigParams struct {
+	Path      string
+	Domain    string
+	LocalMode bool
+}
+
+func NewConfig(p *ConfigParams) (*Config, error) {
+	domain := p.Domain
+	if !strings.HasPrefix(domain, ".") {
+		domain = "." + domain
+	}
 	// default config
 	cfg := &Config{
 		Host: Host{
-			WebApi:             "mirage.dev.example.net",
-			ReverseProxySuffix: ".dev.example.net",
+			WebApi:             "mirage" + domain,
+			ReverseProxySuffix: domain,
 		},
 		Listen: Listen{
 			ForeignAddress: "0.0.0.0",
 			HTTP: []PortMap{
 				{ListenPort: 80, TargetPort: 80},
 			},
-			HTTPS: []PortMap{},
+			HTTPS: nil,
 		},
 		HtmlDir: "./html",
+		ECS: ECSCfg{
+			Region: os.Getenv("AWS_REGION"),
+		},
+		localMode: p.LocalMode,
 	}
 
-	err := config.LoadWithEnv(&cfg, path)
-	if err != nil {
-		log.Fatalf("cannot load config: %s: %s", path, err)
+	if p.Path != "" {
+		log.Printf("[info] loading config file: %s", p.Path)
+		err := config.LoadWithEnv(&cfg, p.Path)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load config: %s: %w", p.Path, err)
+		}
+	} else {
+		log.Println("[info] no config file specified, using default config with domain suffix: ", domain)
+	}
+
+	addDefaultParameter := true
+	for _, v := range cfg.Parameter {
+		if v.Name == DefaultParameter.Name {
+			addDefaultParameter = false
+			break
+		}
+	}
+	if addDefaultParameter {
+		cfg.Parameter = append(cfg.Parameter, DefaultParameter)
 	}
 
 	for _, v := range cfg.Parameter {
 		if v.Rule != "" {
-			paramRegex := regexp.MustCompile(v.Rule)
+			paramRegex, err := regexp.Compile(v.Rule)
+			if err != nil {
+				return nil, fmt.Errorf("invalid parameter rule: %s: %w", v.Rule, err)
+			}
 			v.Regexp = *paramRegex
 		}
 	}
@@ -196,7 +235,7 @@ func NewConfig(path string) *Config {
 	if err := cfg.fillECSDefaults(context.TODO()); err != nil {
 		log.Printf("[warn] failed to fill ECS defaults: %s", err)
 	}
-	return cfg
+	return cfg, nil
 }
 
 func (c *Config) fillECSDefaults(ctx context.Context) error {

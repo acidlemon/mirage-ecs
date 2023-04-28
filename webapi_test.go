@@ -15,7 +15,7 @@ import (
 
 func TestLoadParameter(t *testing.T) {
 	testFile := "config_sample.yml"
-	cfg := NewConfig(testFile)
+	cfg, _ := NewConfig(&ConfigParams{Path: testFile})
 	app := NewWebApi(cfg)
 
 	params := url.Values{}
@@ -77,7 +77,10 @@ parameters:
 		t.Error(err)
 	}
 
-	cfg = NewConfig(f.Name())
+	cfg, err = NewConfig(&ConfigParams{Path: f.Name()})
+	if err != nil {
+		t.Error(err)
+	}
 	app = NewWebApi(cfg)
 
 	c = rocket.NewContext(req, args, nil)

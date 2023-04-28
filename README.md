@@ -6,91 +6,40 @@ mirage-ecs can run and stop an ECS task and serve http request with specified su
 
 ## Usage
 
-Build mirage-ecs container with a configuration file. (default `config.yaml`)
-
-Run mirage-ecs as ECS service.
-
 ### Minimal Configuration
 
-```yaml
-host:
-  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
-  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
-```
+Set a single environment variable.
+
+`MIRAGE_DOMAIN=.dev.example.net` (default is `.local`)
 
 1. mirage-ecs accepts HTTP request on "http://mirage.dev.example.net".
-2. Launch ECS task container specified subdomain.
+2. Launch ECS task container specified subdomain by API or Web UI.
 3. Now, you can access to the task using "http://<subdomain>.dev.exmaple.net/".
 
 `*.dev.example.net` should be resolved to mirage-ecs webapi.
 
-### Full Configuration
+### Launch a mirage-ecs on ECS
 
-#### `host` section
+mirage-ecs is designed to work as an ECS service deployed under an Application Load Balancer (ALB).
 
-`host` section configures hostname of mirage-ecs webapi and suffix of launched ECS task hostname.
+An example of task definition of mirage-ecs is [ecs-taskdef.json](ecs-taskdef.json).
 
-```yaml
-host:
-  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
-  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
-```
-
-#### `listen` section
-
-`listen` section configures port number of mirage-ecs webapi and target ECS task.
-
-```yaml
-listen:
-  http:
-    - listen: 80 # port number of mirage-ecs webapi
-      target: 80 # port number of target ECS task
-```
-
-#### `parameters` section
-
-`parameters` section configures parameters for ECS task.
-
-The default parameter "branch" as below.
-
-```yaml
-parameters:
-  - name: branch
-    env: GIT_BRANCH
-    rule: ""
-    required: true
-```
-
-You can add any custom parameters. "rule" option is regexp string.
-
-These parameters are passed to ECS task as environment variables.
-
-#### `ecs` section
-
-mirage-ecs configures `ecs:` section automatically based on the ECS service and task of itself.
-
-If you want to partially override the settings, write the `ecs:` section.
-
-```yaml
-ecs:
-  region: "ap-northeast-1"
-  cluster: mycluster
-  launch_type: FARGATE
-  network_configuration:
-    awsvpc_configuration:
-      subnets:
-        - subnet-aaaa0000
-        - subnet-bbbb1111
-        - subnet-cccc2222
-      security_groups:
-        - sg-11112222
-        - sg-aaaagggg
-      assign_public_ip: ENABLED
-```
+Requirements:
+- `awsvpc` network mode.
+- A public IP address or NAT Gateway to call AWS APIs.
+- IAM Permissions to launch ECS tasks, and report metrics and get logs.
+  - `ecs:RunTask`
+  - `ecs:DescribeTasks`
+  - `ecs:DescribeTaskDefinition`
+  - `ecs:StopTask`
+  - `ecs:ListTasks`
+  - `cloudwatch:PutMetricData`
+  - `cloudwatch:GetMetricData`
+  - `logs:GetLogEvents`
 
 ### Using CLI
 
-Launch ECS task container using curl.
+Launch an ECS task using curl.
 
 ```console
 $ curl http://mirage.dev.example.net/api/launch \
@@ -121,9 +70,124 @@ mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://gola
 1. Now, you can access to container using "http://cool-feature.dev.exmaple.net/".
 1. Press "Terminate" button.
 
-### API Documents
 
-#### `GET /api/list`
+### Full Configuration
+
+mirage-ecs can be configured by a config file.
+
+Write a YAML file, and specify the file by the `-conf` CLI option or the `MIRAGE_CONF` environment variable.
+
+The default configuration is same as below.
+
+```yaml
+host:
+  webapi: mirage.local
+  reverse_proxy_suffix: .local
+listen:
+  foreign_address: 0.0.0.0
+  http:
+    - listen: 80
+      target: 80
+htmldir: ./html
+parameters:
+  - name: branch
+    env: GIT_BRANCH
+    rule: ""
+    required: true
+```
+
+#### `host` section
+
+`host` section configures hostname of mirage-ecs webapi and suffix of launched ECS task hostname.
+
+```yaml
+host:
+  webapi: mirage.dev.example.net         # hostname of mirage-ecs webapi
+  reverse_proxy_suffix: .dev.example.net # suffix of launched ECS task hostname
+```
+
+#### `listen` section
+
+`listen` section configures port number of mirage-ecs webapi and target ECS task.
+
+```yaml
+listen:
+  http:
+    - listen: 80 # port number of mirage-ecs webapi
+      target: 80 # port number of target ECS task
+```
+
+#### `parameters` section
+
+`parameters` section configures parameters for launched ECS task for subdomains.
+
+The default parameter "branch" as below.
+
+```yaml
+parameters:
+  - name: branch
+    env: GIT_BRANCH
+    rule: ""
+    required: true
+```
+
+You can add any custom parameters. "rule" option is regexp string.
+
+These parameters are passed to ECS task as environment variables.
+
+#### `htmldir` section
+
+`htmldir` section configures directory of mirage-ecs webapi template files.
+
+See [html/](html/) directory for default template files.
+
+Required files are below.
+
+```
+html
+├── launcher.html
+├── layout.html
+└── list.html
+```
+
+#### `ecs` section
+
+mirage-ecs configures `ecs` section automatically based on the ECS service and task of itself.
+
+- `region` is set to `AWS_REGION` enviroment variable.
+- `cluster` and `network_configuration` is set to same as the ECS service.
+- `launch_type` is set to `FARGATE`.
+- `enable_execute_command` is set to `true`.
+- `capacity_provider_strategy` is set to null.
+  - If you want to use capacity provider, write the `ecs` section and remove `launch_type`.
+- `default_task_definition` is not set.
+  - Need to specify the task definition name when launching a task.
+
+If you want to partially override the settings, write the `ecs` section.
+
+```yaml
+ecs:
+  region: "ap-northeast-1"
+  cluster: mycluster
+  default_task_definition: myapp
+  enable_execute_command: true
+  launch_type: FARGATE
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - subnet-aaaa0000
+        - subnet-bbbb1111
+        - subnet-cccc2222
+      security_groups:
+        - sg-11112222
+        - sg-aaaagggg
+      assign_public_ip: ENABLED
+```
+
+
+## API Documents
+
+### `GET /api/list`
 
 `/api/list` returns list of running tasks.
 
@@ -168,7 +232,7 @@ mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://gola
 }
 ```
 
-#### `POST /api/launch`
+### `POST /api/launch`
 
 `/api/launch` launches a new task.
 
@@ -201,7 +265,7 @@ Parameters:
 }
 ```
 
-#### `POST /api/terminate`
+### `POST /api/terminate`
 
 `/api/terminate` terminates the task.
 
@@ -217,7 +281,7 @@ Parameters:
 }
 ```
 
-#### `GET /api/access`
+### `GET /api/access`
 
 `/api/access` returns access counter of the task.
 
@@ -233,7 +297,7 @@ Parameters:
 }
 ```
 
-### mirage link
+## mirage link
 
 mirage link feature enables to launch and terminate multiple tasks that have the same subdomain.
 
@@ -261,20 +325,8 @@ link:
   hosted_zone_id: your route53 hosted zone ID
 ```
 
-Setup
-------
 
-In docker/ directory,
-
-1. Edit `config.yml` to your environment.
-1. Do `make` to create a docker image.
-1. Push the image to ECR.
-1. Put mirage-ecs task definition to ECS.
-   - See also [mirage-ecs-taskdef.json](mirage-ecs-taskdef.json)
-1. Run mirage-ecs service in your ECS.
-
-
-### Requirements
+## Requirements
 
 mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
 
