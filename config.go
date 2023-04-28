@@ -63,20 +63,20 @@ func (c ECSCfg) String() string {
 	return string(b)
 }
 
-func (c ECSCfg) valid() bool {
+func (c ECSCfg) validate() error {
 	if c.Region == "" {
-		return false
+		return fmt.Errorf("region is required")
 	}
 	if c.Cluster == "" {
-		return false
+		return fmt.Errorf("cluster is required")
 	}
 	if c.LaunchType == nil && c.capacityProviderStrategy == nil {
-		return false
+		return fmt.Errorf("launch_type or capacity_provider_strategy is required")
 	}
 	if c.networkConfiguration == nil {
-		return false
+		return fmt.Errorf("network_configuration is required")
 	}
-	return true
+	return nil
 }
 
 type CapacityProviderStrategy []*CapacityProviderStrategyItem
@@ -240,11 +240,11 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 
 func (c *Config) fillECSDefaults(ctx context.Context) error {
 	defer func() {
-		if c.ECS.valid() {
-			log.Printf("[info] built ECS config: %s", c.ECS)
-		} else {
+		if err := c.ECS.validate(); err != nil {
 			log.Printf("[error] invalid ECS config: %s", c.ECS)
-			log.Println("[error] ECS config is invalid, so you may not be able to launch ECS tasks")
+			log.Printf("[error] ECS config is invalid '%s', so you may not be able to launch ECS tasks", err)
+		} else {
+			log.Printf("[info] built ECS config: %s", c.ECS)
 		}
 	}()
 	if c.ECS.Region == "" {
@@ -282,6 +282,10 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 	case *metadata.TaskMetadataV4:
 		cluster = m.Cluster
 		taskArn = m.TaskARN
+	}
+	if c.ECS.Cluster == "" && cluster != "" {
+		log.Printf("[info] ECS cluster is set from task metadata: %s", cluster)
+		c.ECS.Cluster = cluster
 	}
 
 	svc := ecs.New(c.session)
