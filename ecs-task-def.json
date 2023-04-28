@@ -1,9 +1,10 @@
 {
+  "cpu": "256",
+  "memory": "512",
   "containerDefinitions": [
     {
       "name": "mirage-ecs",
-      "image": "ghcr.io/acidlemon/mirage-ecs:v0.7.0",
-      "memory": 128,
+      "image": "ghcr.io/acidlemon/mirage-ecs:v0.7.1",
       "portMappings": [
         {
           "containerPort": 80,
@@ -16,11 +17,16 @@
         {
           "name": "MIRAGE_DOMAIN",
           "value": ".dev.example.net"
+        },
+        {
+          "name": "MIRAGE_LOG_LEVEL",
+          "value": "info"
         }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
+          "awslogs-create-group": "true",
           "awslogs-group": "/ecs/mirage-ecs",
           "awslogs-region": "ap-northeast-1",
           "awslogs-stream-prefix": "ecs"
@@ -31,5 +37,9 @@
   "family": "mirage-ecs",
   "taskRoleArn": "arn:aws:iam::123456789012:role/ecs-task",
   "executionRoleArn": "arn:aws:iam::123456789012:role/ecs-task-execution",
-  "networkMode": "awsvpc"
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "EC2",
+    "FARGATE"
+  ]
 }

@@ -28,9 +28,11 @@ Requirements:
 - `awsvpc` network mode.
 - A public IP address or NAT Gateway or VPC endpoints to call AWS APIs.
 - IAM Permissions to launch ECS tasks, and report metrics and get logs.
+  - `iam:PassRole`
   - `ecs:RunTask`
   - `ecs:DescribeTasks`
   - `ecs:DescribeTaskDefinition`
+  - `ecs:DescribeServices`
   - `ecs:StopTask`
   - `ecs:ListTasks`
   - `cloudwatch:PutMetricData`
