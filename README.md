@@ -22,6 +22,8 @@ Set a single environment variable.
 
 mirage-ecs is designed to work as an ECS service deployed under an Application Load Balancer (ALB).
 
+An example of terraform configuration for deploying mirage-ecs is [terraform/](terraform/).
+
 An example of task definition of mirage-ecs is [ecs-task-def.json](ecs-task-def.json).
 
 Requirements:
@@ -40,6 +42,8 @@ Requirements:
   - `logs:GetLogEvents`
   - `route53:GetHostedZone` (optional for mirage link)
   - `route53:ChangeResourceRecordSets` (optional for mirage link)
+
+  See also [terraform/iam.tf](terraform/iam.tf).
 
 ### Using CLI
 
