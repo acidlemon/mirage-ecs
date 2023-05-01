@@ -1,5 +1,5 @@
 resource "aws_iam_role" "task" {
-  name = "mirage-ecs-task"
+  name = "${var.project}-ecs-task"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -16,7 +16,7 @@ resource "aws_iam_role" "task" {
 }
 
 resource "aws_iam_policy" "mirage-ecs" {
-  name = "mirage-ecs"
+  name = var.project
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

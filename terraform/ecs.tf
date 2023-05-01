@@ -1,6 +1,6 @@
 resource "aws_ecs_cluster" "mirage-ecs" {
-  name = "mirage-ecs"
+  name = var.project
   tags = {
-    Name = "mirage-ecs"
+    Name = var.project
   }
 }

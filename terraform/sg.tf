@@ -1,5 +1,5 @@
 resource "aws_security_group" "default" {
-  name   = "mirage-ecs"
+  name   = "${var.project}-default"
   vpc_id = aws_vpc.main.id
   ingress {
     self      = true
@@ -16,7 +16,7 @@ resource "aws_security_group" "default" {
 }
 
 resource "aws_security_group" "alb" {
-  name   = "mirage-ecs-alb"
+  name   = "${var.project}-alb"
   vpc_id = aws_vpc.main.id
   ingress {
     from_port   = 80

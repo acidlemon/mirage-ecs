@@ -1,8 +1,13 @@
+variable "project" {
+  type    = string
+  default = "mirage-ecs"
+}
+
 provider "aws" {
   region = "ap-northeast-1"
   default_tags {
     tags = {
-      "env" = "mirage-ecs"
+      "env" = "${var.project}"
     }
   }
 }
