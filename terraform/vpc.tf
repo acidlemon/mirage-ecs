@@ -1,7 +1,7 @@
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   tags = {
-    Name = "mirage-ecs"
+    Name = var.project
   }
 }
 
@@ -10,7 +10,7 @@ resource "aws_subnet" "public-a" {
   cidr_block        = "10.0.1.0/24"
   availability_zone = "ap-northeast-1a"
   tags = {
-    Name = "mirage-ecs-public-a"
+    Name = "${var.project}-public-a"
   }
 }
 
@@ -19,7 +19,7 @@ resource "aws_subnet" "public-c" {
   cidr_block        = "10.0.2.0/24"
   availability_zone = "ap-northeast-1c"
   tags = {
-    Name = "mirage-ecs-public-c"
+    Name = "${var.project}-public-c"
   }
 }
 
@@ -28,14 +28,14 @@ resource "aws_subnet" "public-d" {
   cidr_block        = "10.0.3.0/24"
   availability_zone = "ap-northeast-1d"
   tags = {
-    Name = "mirage-ecs-public-d"
+    Name = "${var.project}-public-d"
   }
 }
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
   tags = {
-    Name = "mirage-ecs"
+    Name = var.project
   }
 }
 
@@ -46,7 +46,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
   tags = {
-    Name = "mirage-ecs-public"
+    Name = "${var.project}-public"
   }
 }
 

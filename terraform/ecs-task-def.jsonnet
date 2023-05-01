@@ -26,10 +26,9 @@
       logConfiguration: {
         logDriver: 'awslogs',
         options: {
-          'awslogs-create-group': 'true',
-          'awslogs-group': '/ecs/mirage-ecs',
-          'awslogs-region': 'ap-northeast-1',
-          'awslogs-stream-prefix': 'ecs',
+          'awslogs-group': '{{ tfstate `aws_cloudwatch_log_group.mirage-ecs.name` }}',
+          'awslogs-region': '{{ must_env `AWS_REGION` }}',
+          'awslogs-stream-prefix': 'mirage-ecs',
         },
       },
     },
