@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go/service/s3"
 	metadata "github.com/brunoscheufler/aws-ecs-metadata-go"
 	config "github.com/kayac/go-config"
 )
@@ -195,14 +198,27 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 		localMode: p.LocalMode,
 	}
 
-	if p.Path != "" {
-		log.Printf("[info] loading config file: %s", p.Path)
-		err := config.LoadWithEnv(&cfg, p.Path)
+	cfg.session = session.Must(session.NewSession(
+		&aws.Config{Region: aws.String(cfg.ECS.Region)},
+	))
+
+	if p.Path == "" {
+		log.Println("[info] no config file specified, using default config with domain suffix: ", domain)
+	} else {
+		var content []byte
+		var err error
+		if strings.HasPrefix(p.Path, "s3://") {
+			content, err = loadFromS3(context.TODO(), cfg.session, p.Path)
+		} else {
+			content, err = loadFromFile(p.Path)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("cannot load config: %s: %w", p.Path, err)
 		}
-	} else {
-		log.Println("[info] no config file specified, using default config with domain suffix: ", domain)
+		log.Printf("[info] loading config file: %s", p.Path)
+		if err := config.LoadWithEnvBytes(&cfg, content); err != nil {
+			return nil, fmt.Errorf("cannot load config: %s: %w", p.Path, err)
+		}
 	}
 
 	addDefaultParameter := true
@@ -226,9 +242,6 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 		}
 	}
 
-	cfg.session = session.Must(session.NewSession(
-		&aws.Config{Region: aws.String(cfg.ECS.Region)},
-	))
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
@@ -318,4 +331,35 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func loadFromFile(p string) ([]byte, error) {
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func loadFromS3(ctx context.Context, sess *session.Session, u string) ([]byte, error) {
+	svc := s3.New(sess)
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme != "s3" {
+		return nil, fmt.Errorf("invalid scheme: %s", parsed.Scheme)
+	}
+	bucket := parsed.Host
+	key := strings.TrimPrefix(parsed.Path, "/")
+	out, err := svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer out.Body.Close()
+	return io.ReadAll(out.Body)
 }

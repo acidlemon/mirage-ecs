@@ -85,6 +85,10 @@ mirage-ecs can be configured by a config file.
 
 Write a YAML file, and specify the file by the `-conf` CLI option or the `MIRAGE_CONF` environment variable.
 
+mirage-ecs can load config file from S3 and local file. To load config file from S3, specify the S3 URL (e.g. `s3://example-bucket/config.yaml`) to the `MIRAGE_CONF` environment variable.
+
+```console
+
 The default configuration is same as below.
 
 ```yaml
