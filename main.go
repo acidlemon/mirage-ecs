@@ -17,7 +17,7 @@ var (
 )
 
 func main() {
-	confFile := flag.String("conf", "", "specify config file")
+	confFile := flag.String("conf", "", "specify config file or S3 URL")
 	domain := flag.String("domain", ".local", "reverse proxy suffix")
 	var showVersion, showConfig, localMode bool
 	flag.BoolVar(&showVersion, "version", false, "show version")
