@@ -12,7 +12,7 @@
 {{ range $param := .Parameters }}
 
   <label for="{{ $param.Name }}" class="col-md-2 text-right">{{ $param.Name }} </label>
-  <input type="text" name="{{ $param.Name }}" value="" id="{{ $param.Name }}"
+  <input type="text" name="{{ $param.Name }}" value="{{ $param.Default }}" id="{{ $param.Name }}"
          class="col-md-5" placeholder="your {{ $param.Name }}" />
   <p class="col-md-5">{{ if $param.Required }}*Required {{ else}} (optional) {{ end }}</p>
 
@@ -44,4 +44,3 @@
 </div>
 
 {{ template "footer" }}
-

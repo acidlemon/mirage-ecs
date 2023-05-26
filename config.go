@@ -25,6 +25,7 @@ var DefaultParameter = &Parameter{
 	Env:      "GIT_BRANCH",
 	Rule:     "",
 	Required: true,
+	Default:  "",
 }
 
 type Config struct {
@@ -163,6 +164,7 @@ type Parameter struct {
 	Rule     string        `yaml:"rule"`
 	Required bool          `yaml:"required"`
 	Regexp   regexp.Regexp `yaml:"-"`
+	Default  string        `yaml:"default"`
 }
 
 type Parameters []*Parameter
