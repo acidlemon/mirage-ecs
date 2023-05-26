@@ -286,6 +286,9 @@ func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
 
 	for _, v := range api.cfg.Parameter {
 		param, _ := c.ParamSingle(v.Name)
+		if param == "" && v.Default != "" {
+			param = v.Default
+		}
 		if param == "" && v.Required {
 			return nil, fmt.Errorf("lack require parameter: %s", v.Name)
 		} else if param == "" {
