@@ -49,7 +49,7 @@ func Run() {
 			laddr := fmt.Sprintf("%s:%d", app.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				log.Printf("[error] cannot listen %s", laddr)
+				log.Printf("[error] cannot listen %s: %s", laddr, err)
 				return
 			}
 

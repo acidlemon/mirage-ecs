@@ -20,10 +20,12 @@ func main() {
 	confFile := flag.String("conf", "", "specify config file or S3 URL")
 	domain := flag.String("domain", ".local", "reverse proxy suffix")
 	var showVersion, showConfig, localMode bool
+	var defaultPort int
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.BoolVar(&showConfig, "x", false, "show config")
 	flag.BoolVar(&localMode, "local", false, "local mode (for development)")
+	flag.IntVar(&defaultPort, "default-port", 80, "default port number")
 	logLevel := flag.String("log-level", "info", "log level (trace, debug, info, warn, error)")
 	flag.VisitAll(overrideWithEnv)
 	flag.Parse()
@@ -43,9 +45,10 @@ func main() {
 	log.Printf("[debug] setting log level: %s", *logLevel)
 
 	cfg, err := NewConfig(&ConfigParams{
-		Path:      *confFile,
-		LocalMode: localMode,
-		Domain:    *domain,
+		Path:        *confFile,
+		LocalMode:   localMode,
+		Domain:      *domain,
+		DefaultPort: defaultPort,
 	})
 	if err != nil {
 		log.Fatalf("[error] %s", err)

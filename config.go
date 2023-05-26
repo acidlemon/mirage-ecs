@@ -170,15 +170,21 @@ type Parameter struct {
 type Parameters []*Parameter
 
 type ConfigParams struct {
-	Path      string
-	Domain    string
-	LocalMode bool
+	Path        string
+	Domain      string
+	LocalMode   bool
+	DefaultPort int
 }
+
+const DefaultPort = 80
 
 func NewConfig(p *ConfigParams) (*Config, error) {
 	domain := p.Domain
 	if !strings.HasPrefix(domain, ".") {
 		domain = "." + domain
+	}
+	if p.DefaultPort == 0 {
+		p.DefaultPort = DefaultPort
 	}
 	// default config
 	cfg := &Config{
@@ -189,7 +195,7 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 		Listen: Listen{
 			ForeignAddress: "0.0.0.0",
 			HTTP: []PortMap{
-				{ListenPort: 80, TargetPort: 80},
+				{ListenPort: p.DefaultPort, TargetPort: p.DefaultPort},
 			},
 			HTTPS: nil,
 		},
