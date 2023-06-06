@@ -101,6 +101,9 @@ SYNC:
 			log.Println("[warn]", err)
 			continue
 		}
+		sort.SliceStable(running, func(i, j int) bool {
+			return running[i].Created.Before(running[j].Created)
+		})
 		available := make(map[string]bool)
 		for _, info := range running {
 			log.Println("[debug] ruuning task", *info.task.TaskArn)
