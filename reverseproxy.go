@@ -34,6 +34,7 @@ type proxyControl struct {
 type ReverseProxy struct {
 	mu                sync.RWMutex
 	cfg               *Config
+	domains           []string
 	domainMap         map[string]proxyHandlers
 	accessCounters    map[string]*accessCounter
 	accessCounterUnit time.Duration
@@ -73,7 +74,7 @@ func (r *ReverseProxy) Exists(subdomain string) bool {
 	if exists {
 		return true
 	}
-	for name, _ := range r.domainMap {
+	for _, name := range r.domains {
 		if m, _ := path.Match(name, subdomain); m {
 			return true
 		}
@@ -84,10 +85,8 @@ func (r *ReverseProxy) Exists(subdomain string) bool {
 func (r *ReverseProxy) Subdomains() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ds := make([]string, 0, len(r.domainMap))
-	for name, _ := range r.domainMap {
-		ds = append(ds, name)
-	}
+	ds := make([]string, len(r.domains))
+	copy(ds, r.domains)
 	return ds
 }
 
@@ -98,9 +97,9 @@ func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
 
 	proxyHandlers, ok := r.domainMap[subdomain]
 	if !ok {
-		for name, ph := range r.domainMap {
+		for _, name := range r.domains {
 			if m, _ := path.Match(name, subdomain); m {
-				proxyHandlers = ph
+				proxyHandlers = r.domainMap[name]
 				break
 			}
 		}
@@ -232,6 +231,12 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
 	}
 	r.domainMap[subdomain] = ph
+	for _, name := range r.domains {
+		if name == subdomain {
+			return
+		}
+	}
+	r.domains = append(r.domains, subdomain)
 }
 
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
@@ -240,6 +245,12 @@ func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	log.Println("[info] removing subdomain:", subdomain)
 	delete(r.domainMap, subdomain)
 	delete(r.accessCounters, subdomain)
+	for i, name := range r.domains {
+		if name == subdomain {
+			r.domains = append(r.domains[:i], r.domains[i+1:]...)
+			return
+		}
+	}
 }
 
 func (r *ReverseProxy) Modify(action *proxyControl) {
