@@ -65,7 +65,7 @@ $ curl https://mirage.dev.example.net/api/terminate \
 
 `subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
 
-#### Specication of wildcard match
+#### Specification of wildcard match
 
 mirage-ecs supports wildcard in `subdomain` parameter.
 
