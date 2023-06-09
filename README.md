@@ -65,7 +65,23 @@ $ curl https://mirage.dev.example.net/api/terminate \
 
 `subdomain` supports wildcard (e.g. `www*`,`foo[0-9]`, `api-?-test`).
 
-mirage-ecs matches the pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
+#### Specication of wildcard match
+
+mirage-ecs supports wildcard in `subdomain` parameter.
+
+Matches a pattern to hostname using Go's [path/#Match](https://golang.org/pkg/path/#Match).
+
+If multiple tasks match the pattern, mirage-ecs prefer the task with the earliest launch time. Not a longest match. For example,
+
+1. mirage-ecs launches a task with `subdomain=foo-*`.
+2. mirage-ecs launches a task with `subdomain=foo-bar-*`.
+3. mirage-ecs launches a task with `subdomain=*-baz`.
+
+`foo-bar-baz` matches 1 and 2 and 3, but mirage-ecs prefer 1.
+
+After `foo-*` is terminated, `foo-bar-baz` matches 2 and 3, but mirage-ecs prefer 2.
+
+
 
 ### Using Web Interface
 
