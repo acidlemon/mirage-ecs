@@ -7,6 +7,7 @@ require (
 	github.com/ReneKroon/ttlcache/v2 v2.4.0
 	github.com/aws/aws-sdk-go v1.38.34
 	github.com/brunoscheufler/aws-ecs-metadata-go v0.0.0-20221221133751-67e37ae746cd
+	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/logutils v1.0.0
 	github.com/kayac/go-config v0.6.0
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
