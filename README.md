@@ -73,15 +73,13 @@ Matches a pattern to hostname using Go's [path/#Match](https://golang.org/pkg/pa
 
 If multiple tasks match the pattern, mirage-ecs prefer the task with the earliest launch time. Not a longest match. For example,
 
-1. mirage-ecs launches a task with `subdomain=foo-*`.
-2. mirage-ecs launches a task with `subdomain=foo-bar-*`.
-3. mirage-ecs launches a task with `subdomain=*-baz`.
+1. Launches a task with `subdomain=foo-*`.
+2. Launches a task with `subdomain=foo-bar-*`.
+3. Launches a task with `subdomain=*-baz`.
 
 `foo-bar-baz` matches 1 and 2 and 3, but mirage-ecs prefer 1.
 
 After `foo-*` is terminated, `foo-bar-baz` matches 2 and 3, but mirage-ecs prefer 2.
-
-
 
 ### Using Web Interface
 
