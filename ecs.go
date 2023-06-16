@@ -45,7 +45,7 @@ const (
 
 type ECSInterface interface {
 	Run()
-	Launch(subdomain string, option map[string]string, taskdefs ...string) error
+	Launch(subdomain string, option map[string]string, taskdefs ...string) ([]string, error)
 	Logs(subdomain string, since time.Time, tail int) ([]string, error)
 	Terminate(subdomain string) error
 	TerminateBySubdomain(subdomain string) error
@@ -139,13 +139,13 @@ SYNC:
 	}
 }
 
-func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
+func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) (string, error) {
 	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to describe task definition")
+		return "", errors.Wrap(err, "failed to describe task definition")
 	}
 
 	// override envs for each container in taskdef
@@ -179,27 +179,27 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	log.Printf("[debug] RunTaskInput: %s", runtaskInput)
 	out, err := d.ECS.RunTask(runtaskInput)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(out.Failures) > 0 {
 		f := out.Failures[0]
-		return fmt.Errorf(
+		return "", fmt.Errorf(
 			"run task failed. reason:%s arn:%s", *f.Reason, *f.Arn,
 		)
 	}
 	task := out.Tasks[0]
 	log.Printf("[info] launced task ARN: %s", *task.TaskArn)
-	return nil
+	return *task.TaskArn, nil
 }
 
-func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
+func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) ([]string, error) {
 	if infos, err := d.find(subdomain); err != nil {
-		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
+		return nil, errors.Wrapf(err, "failed to get subdomain %s", subdomain)
 	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
 		err := d.TerminateBySubdomain(subdomain)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -222,13 +222,26 @@ func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...str
 	})
 
 	var eg errgroup.Group
-	for _, taskdef := range taskdefs {
+	taskArns := make([]string, len(taskdefs))
+	var mu sync.Mutex
+	for i, taskdef := range taskdefs {
 		taskdef := taskdef
+		i := i
 		eg.Go(func() error {
-			return d.launchTask(subdomain, taskdef, dockerEnv)
+			taskArn, err := d.launchTask(subdomain, taskdef, dockerEnv)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			taskArns[i] = taskArn
+			mu.Unlock()
+			return nil
 		})
 	}
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return taskArns, err
+	}
+	return taskArns, nil
 }
 
 func (d *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {

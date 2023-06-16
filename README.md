@@ -313,9 +313,17 @@ Parameters:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "datails": {
+    "subdomain": "my-subdomain",
+    "task_arns": [
+      "arn:aws:ecs:ap-northeast-1:123456789012:task/dev/af8e7a6dad6e44d4862696002f41c2dc"
+    ]
+  }
 }
 ```
+
+Multiple `taskdef` parameters are allowed. See "mirage link" section for details.
 
 #### `GET /api/logs`
 
