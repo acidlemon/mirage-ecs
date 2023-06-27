@@ -24,6 +24,8 @@ type Mirage struct {
 	ECS          ECSInterface
 	Route53      *Route53
 	CloudWatch   *cloudwatch.CloudWatch
+
+	mu sync.Mutex
 }
 
 func Setup(cfg *Config) {
@@ -118,7 +120,9 @@ func (m *Mirage) RunAccessCountCollector() {
 		all := m.ReverseProxy.CollectAccessCounters()
 		s, _ := json.Marshal(all)
 		log.Printf("[info] access counters: %s", string(s))
-		if !m.Config.localMode {
+		if m.Config.localMode {
+			log.Println("[info] local mode: skip put metrics")
+		} else {
 			m.PutAllMetrics(all)
 		}
 	}
@@ -196,4 +200,12 @@ func (m *Mirage) PutAllMetrics(all map[string]map[time.Time]int64) {
 			log.Printf("[error] %s", err)
 		}
 	}
+}
+
+func (app *Mirage) TryLock() bool {
+	return app.mu.TryLock()
+}
+
+func (app *Mirage) Unlock() {
+	app.mu.Unlock()
 }
