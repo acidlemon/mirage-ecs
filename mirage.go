@@ -81,15 +81,14 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 	case m.isDockerHost(host):
 		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
 
+	case strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix):
+		msg := fmt.Sprintf("%s is not found", host)
+		log.Println("[warn]", msg)
+		http.Error(w, msg, http.StatusNotFound)
+
 	default:
-		if req.URL.Path == "/" {
-			// otherwise root returns 200 (for healthcheck)
-			http.Error(w, "mirage-ecs", http.StatusOK)
-		} else {
-			// return 404
-			log.Printf("[warn] host %s is not found", host)
-			http.NotFound(w, req)
-		}
+		// not a vhost, returns 200 (for healthcheck)
+		http.Error(w, "mirage-ecs", http.StatusOK)
 	}
 
 }
