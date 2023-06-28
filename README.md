@@ -373,7 +373,7 @@ Parameters:
 
 Parameters:
 - `excludes`: subdomains of tasks to exclude termination. multiple values are allowed.
-- `duration`: duration(seconds) of the counter. Required.
+- `duration`: duration(seconds) of the counter. required. minimum is 300 (5 min).
 
 mirage-ecs counts access of all tasks the same as `/api/access` API internally. If the access count of a task is 0 and the task has an uptime over the specified duration, terminate these tasks.
 

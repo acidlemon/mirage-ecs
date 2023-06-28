@@ -16,6 +16,8 @@ import (
 
 var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\[\]]{0,61}[a-zA-Z0-9*?\[\]]$`)
 
+const PurgeMinimumDuration = 5 * time.Minute
+
 type WebApi struct {
 	rocket.WebApp
 	cfg *Config
@@ -334,11 +336,12 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	excludes, _ := c.Param("excludes")
 	d, _ := c.ParamSingle("duration")
 	di, err := strconv.ParseInt(d, 10, 64)
-	if err != nil || di == 0 {
+	if err != nil || di <= int64(PurgeMinimumDuration.Seconds()) {
 		c.Res().StatusCode = http.StatusBadRequest
-		log.Printf("[error] invalid duration: %s %s", d, err)
+		msg := fmt.Sprintf("[error] invalid duration (at least %d): %s %s", PurgeMinimumDuration, d, err)
+		log.Println(msg)
 		return rocket.RenderVars{
-			"result": fmt.Sprintf("[error] invalid duration: %s %s", d, err),
+			"result": msg,
 		}
 	}
 
