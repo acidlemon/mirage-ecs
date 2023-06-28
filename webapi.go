@@ -336,9 +336,13 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	excludes, _ := c.Param("excludes")
 	d, _ := c.ParamSingle("duration")
 	di, err := strconv.ParseInt(d, 10, 64)
-	if err != nil || di <= int64(PurgeMinimumDuration.Seconds()) {
+	mininum := int64(PurgeMinimumDuration.Seconds())
+	if err != nil || di < mininum {
 		c.Res().StatusCode = http.StatusBadRequest
-		msg := fmt.Sprintf("[error] invalid duration (at least %d): %s %s", PurgeMinimumDuration, d, err)
+		msg := fmt.Sprintf("[error] invalid duration %s (at least %d)", d, mininum)
+		if err != nil {
+			msg += ": " + err.Error()
+		}
 		log.Println(msg)
 		return rocket.RenderVars{
 			"result": msg,
