@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	"gopkg.in/acidlemon/rocket.v2"
 )
 
 var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\[\]]{0,61}[a-zA-Z0-9*?\[\]]$`)
+
+const PurgeMinimumDuration = 5 * time.Minute
 
 type WebApi struct {
 	rocket.WebApp
@@ -38,6 +41,7 @@ func NewWebApi(cfg *Config) *WebApi {
 	app.AddRoute("/api/logs", app.ApiLogs, view)
 	app.AddRoute("/api/terminate", app.ApiTerminate, view)
 	app.AddRoute("/api/access", app.ApiAccess, view)
+	app.AddRoute("/api/purge", app.ApiPurge, view)
 
 	app.BuildRouter()
 
@@ -129,6 +133,11 @@ func (api *WebApi) ApiTerminate(c rocket.CtxData) {
 
 func (api *WebApi) ApiAccess(c rocket.CtxData) {
 	result := api.accessCounter(c)
+	c.RenderJSON(result)
+}
+
+func (api *WebApi) ApiPurge(c rocket.CtxData) {
+	result := api.purge(c)
 	c.RenderJSON(result)
 }
 
@@ -315,4 +324,94 @@ func validateSubdomain(s string) error {
 		return err
 	}
 	return nil
+}
+
+func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
+	if c.Req().Method != "POST" {
+		c.Res().StatusCode = http.StatusMethodNotAllowed
+		c.RenderText("you must use POST")
+		return rocket.RenderVars{}
+	}
+
+	excludes, _ := c.Param("excludes")
+	d, _ := c.ParamSingle("duration")
+	di, err := strconv.ParseInt(d, 10, 64)
+	mininum := int64(PurgeMinimumDuration.Seconds())
+	if err != nil || di < mininum {
+		c.Res().StatusCode = http.StatusBadRequest
+		msg := fmt.Sprintf("[error] invalid duration %s (at least %d)", d, mininum)
+		if err != nil {
+			msg += ": " + err.Error()
+		}
+		log.Println(msg)
+		return rocket.RenderVars{
+			"result": msg,
+		}
+	}
+
+	excludesMap := make(map[string]struct{}, len(excludes))
+	for _, exclude := range excludes {
+		excludesMap[exclude] = struct{}{}
+	}
+	duration := time.Duration(di) * time.Second
+	begin := time.Now().Add(-duration)
+
+	infos, err := app.ECS.List(statusRunning)
+	if err != nil {
+		c.Res().StatusCode = http.StatusInternalServerError
+		log.Println("[error] list ecs failed: ", err)
+		return rocket.RenderVars{
+			"result": err.Error(),
+		}
+	}
+	tm := make(map[string]struct{}, len(infos))
+	for _, info := range infos {
+		if _, ok := excludesMap[info.SubDomain]; ok {
+			log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
+			continue
+		}
+		if info.Created.After(begin) {
+			log.Printf("[info] skip recent created subdomain: %s %s", info.SubDomain, info.Created.Format(time.RFC3339))
+			continue
+		}
+		tm[info.SubDomain] = struct{}{}
+	}
+	terminates := lo.Keys(tm)
+	if len(terminates) > 0 {
+		go purgeSubdomains(terminates, duration)
+	}
+
+	return rocket.RenderVars{
+		"status": "ok",
+	}
+}
+
+func purgeSubdomains(subdomains []string, duration time.Duration) {
+	if app.TryLock() {
+		defer app.Unlock()
+	} else {
+		log.Println("[info] skip purge subdomains, another purge is running")
+		return
+	}
+	log.Printf("[info] start purge subdomains %d", len(subdomains))
+	purged := 0
+	for _, subdomain := range subdomains {
+		sum, err := app.GetAccessCount(subdomain, duration)
+		if err != nil {
+			log.Printf("[warn] access count failed: %s %s", subdomain, err)
+			continue
+		}
+		if sum > 0 {
+			log.Printf("[info] skip purge %s %d access", subdomain, sum)
+			continue
+		}
+		if err := app.ECS.TerminateBySubdomain(subdomain); err != nil {
+			log.Printf("[warn] terminate failed %s %s", subdomain, err)
+		} else {
+			purged++
+			log.Printf("[info] purged %s", subdomain)
+		}
+		time.Sleep(3 * time.Second)
+	}
+	log.Printf("[info] purge %d subdomains completed", purged)
 }

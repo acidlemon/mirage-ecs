@@ -367,6 +367,28 @@ Parameters:
 }
 ```
 
+### `POST /api/purge`
+
+`/api/purge` terminates tasks that not be accessed in the specified duration.
+
+Parameters:
+- `excludes`: subdomains of tasks to exclude termination. multiple values are allowed.
+- `duration`: duration(seconds) of the counter. required. minimum is 300 (5 min).
+
+mirage-ecs counts access of all tasks the same as `/api/access` API internally. If the access count of a task is 0 and the task has an uptime over the specified duration, terminate these tasks.
+
+For example, if you specify `duration=86400`, mirage-ecs terminates tasks that meet the following conditions both.
+- Not be accessed in the last 24 hours.
+- Uptime over 24 hours.
+
+This API works ansynchronously. The response is returned immediately. mirage-ecs terminates tasks in the background.
+
+```json
+{
+  "status": "ok"
+}
+```
+
 ## Requirements
 
 mirage-ecs requires [ECS Long ARN Format](https://aws.amazon.com/jp/blogs/compute/migrating-your-amazon-ecs-deployment-to-the-new-arn-and-resource-id-format-2/) for tagging tasks.
