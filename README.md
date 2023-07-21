@@ -307,15 +307,41 @@ link:
 `/api/launch` launches a new task.
 
 Parameters:
-- `subdomain`: subdomain of the task.
-- `branch`: branch name for the task.
-- `taskdef`: ECS task definition name (maybe includes revision) for the task.
+- `subdomain`: subdomain of the task. (required)
+- `taskdef`: ECS task definition name (maybe includes revision) for the task. (required)
+- extra parameters: Additional parameters for the task. (optional, defined in config file `parameters` section)
 
 ```json
 {
   "status": "ok"
 }
 ```
+
+#### Extra parameters
+
+Extra parameters are passed to ECS task as environment variables.
+For example, if you define the following parameters in config file, and launch a task with `launched_by=foobar` parameter, mirage-ecs launches a task with `GIT_BRANCH=main` and `LAUNCHED_BY=foobar` environment variables.
+
+```yaml
+parameters:
+  - name: branch
+    env: GIT_BRANCH
+    rule: ""
+    required: true
+    default: main
+  - name: launched_by
+    env: LAUNCHED_BY
+    rule: ""
+    required: false
+```
+
+mirage-ecs also add `SUBDOMAIN` environment variable to the task. `SUBDOMAIN` is base64 encoded value of `subdomain` parameter.
+
+mirage-ecs tags the task with following keys and values.
+- `ManagedBy=mirage-ecs`
+- `Subdomain={base64 encoded subdomain}`
+- `branch={branch}`
+- `launched_by={launched_by}`
 
 #### `GET /api/logs`
 
@@ -373,6 +399,9 @@ Parameters:
 
 Parameters:
 - `excludes`: subdomains of tasks to exclude termination. multiple values are allowed.
+- `exclude_tags`: tags of tasks to exclude termination. multiple values are allowed.
+  - format is `Key:Value`
+  - See also /api/lanch.
 - `duration`: duration(seconds) of the counter. required. minimum is 300 (5 min).
 
 mirage-ecs counts access of all tasks the same as `/api/access` API internally. If the access count of a task is 0 and the task has an uptime over the specified duration, terminate these tasks.
