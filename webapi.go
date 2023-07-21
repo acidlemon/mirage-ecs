@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/samber/lo"
@@ -310,7 +311,7 @@ func (api *WebApi) loadParameter(c rocket.CtxData) (TaskParameter, error) {
 				return nil, fmt.Errorf("parameter %s value is rule error", v.Name)
 			}
 		}
-		if len(param) > 255 {
+		if utf8.RuneCountInString(param) > 255 {
 			return nil, fmt.Errorf("parameter %s value is too long(max 255 unicode characters)", v.Name)
 		}
 		parameter[v.Name] = param
