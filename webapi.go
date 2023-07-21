@@ -290,8 +290,8 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 	}
 }
 
-func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
-	var parameter map[string]string = make(map[string]string)
+func (api *WebApi) loadParameter(c rocket.CtxData) (TaskParameter, error) {
+	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {
 		param, _ := c.ParamSingle(v.Name)

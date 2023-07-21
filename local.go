@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -19,6 +18,7 @@ type ECSLocal struct {
 	Informations map[string]Information
 
 	stopServers map[string]func()
+	cfg         *Config
 }
 
 func NewECSLocal(cfg *Config) *ECSLocal {
@@ -26,6 +26,7 @@ func NewECSLocal(cfg *Config) *ECSLocal {
 	return &ECSLocal{
 		Informations: map[string]Information{},
 		stopServers:  map[string]func(){},
+		cfg:          cfg,
 	}
 }
 
@@ -44,17 +45,15 @@ func (ecs *ECSLocal) List(status string) ([]Information, error) {
 	return infos, nil
 }
 
-func (ecs *ECSLocal) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
+func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...string) error {
 	if info, ok := ecs.Informations[subdomain]; ok {
 		return fmt.Errorf("subdomain %s is already used by %s", subdomain, info.ID)
 	}
 	id := generateRandomHexID(32)
-	env := map[string]string{}
-	for k, v := range option {
-		env[strings.ToUpper(k)] = v
-	}
+	env := option.ToEnv(subdomain, ecs.cfg.Parameter)
 	log.Printf("[info] Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id)
-	port, stopServer := runMockServer("Hello, Mirage! subdomain: " + subdomain + "")
+	contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
+	port, stopServer := runMockServer(contents)
 	ecs.Informations[subdomain] = Information{
 		ID:         "arn:aws:ecs:ap-northeast-1:123456789012:task/mirage/" + id,
 		ShortID:    id,
