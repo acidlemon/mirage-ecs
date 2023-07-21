@@ -31,6 +31,7 @@ type Information struct {
 	PortMap    map[string]int    `json:"port_map"`
 	Env        map[string]string `json:"env"`
 
+	tags []*ecs.Tag
 	task *ecs.Task
 }
 
@@ -450,6 +451,7 @@ func (d *ECS) List(desiredStatus string) ([]Information, error) {
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
 				Env:        getEnvironmentsFromTask(task),
+				tags:       task.Tags,
 				task:       task,
 			}
 			if portMap, err := d.portMapInTask(task); err != nil {

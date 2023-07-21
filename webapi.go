@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/samber/lo"
 	"gopkg.in/acidlemon/rocket.v2"
 )
@@ -334,6 +335,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	excludes, _ := c.Param("excludes")
+	excludeTags, _ := c.Param("exclude_tags")
 	d, _ := c.ParamSingle("duration")
 	di, err := strconv.ParseInt(d, 10, 64)
 	mininum := int64(PurgeMinimumDuration.Seconds())
@@ -353,6 +355,23 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	for _, exclude := range excludes {
 		excludesMap[exclude] = struct{}{}
 	}
+	excludeTagsMap := make(map[string]string, len(excludeTags))
+	for _, excludeTag := range excludeTags {
+		p := strings.SplitN(excludeTag, ":", 2)
+		if len(p) != 2 {
+			c.Res().StatusCode = http.StatusBadRequest
+			msg := fmt.Sprintf("[error] invalid exclude_tags format %s", excludeTag)
+			if err != nil {
+				msg += ": " + err.Error()
+			}
+			log.Println(msg)
+			return rocket.RenderVars{
+				"result": msg,
+			}
+		}
+		k, v := p[0], p[1]
+		excludeTagsMap[k] = v
+	}
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
@@ -369,6 +388,13 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 		if _, ok := excludesMap[info.SubDomain]; ok {
 			log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
 			continue
+		}
+		for _, t := range info.tags {
+			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
+			if ev, ok := excludeTagsMap[k]; ok && ev == v {
+				log.Printf("[info] skip exclude tag: %s=%s", k, v)
+				continue
+			}
 		}
 		if info.Created.After(begin) {
 			log.Printf("[info] skip recent created subdomain: %s %s", info.SubDomain, info.Created.Format(time.RFC3339))

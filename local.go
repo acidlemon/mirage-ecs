@@ -66,7 +66,8 @@ func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...
 		PortMap: map[string]int{
 			"httpd": port,
 		},
-		Env: env,
+		Env:  env,
+		tags: option.ToECSTags(subdomain, ecs.cfg.Parameter),
 	}
 	ecs.stopServers[id] = stopServer
 	app.ReverseProxy.AddSubdomain(subdomain, "127.0.0.1", port)
