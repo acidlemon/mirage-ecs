@@ -27,7 +27,7 @@ type WebApi struct {
 }
 
 func NewWebApi(cfg *Config, m *Mirage) *WebApi {
-	app := &WebApi{}
+	app := &WebApi{mirage: m}
 	app.Init()
 	app.cfg = cfg
 
