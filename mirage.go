@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-var app *Mirage
+//var app *Mirage
 
 type Mirage struct {
 	Config       *Config
@@ -28,27 +28,26 @@ type Mirage struct {
 	mu sync.Mutex
 }
 
-func Setup(cfg *Config) {
+func Setup(cfg *Config) *Mirage {
 	m := &Mirage{
 		Config:       cfg,
-		WebApi:       NewWebApi(cfg),
 		ReverseProxy: NewReverseProxy(cfg),
-		ECS:          NewECS(cfg),
 		Route53:      NewRoute53(cfg),
 		CloudWatch:   cloudwatch.New(cfg.session),
 	}
-
-	app = m
+	m.WebApi = NewWebApi(cfg, m)
+	m.ECS = NewECS(cfg, m)
+	return m
 }
 
-func Run() {
+func Run(m *Mirage) {
 	// launch server
 	var wg sync.WaitGroup
-	for _, v := range app.Config.Listen.HTTP {
+	for _, v := range m.Config.Listen.HTTP {
 		wg.Add(1)
 		go func(port int) {
 			defer wg.Done()
-			laddr := fmt.Sprintf("%s:%d", app.Config.Listen.ForeignAddress, port)
+			laddr := fmt.Sprintf("%s:%d", m.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
 				log.Printf("[error] cannot listen %s: %s", laddr, err)
@@ -57,15 +56,16 @@ func Run() {
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-				app.ServeHTTPWithPort(w, req, port)
+				m.ServeHTTPWithPort(w, req, port)
 			})
 
 			log.Println("[info] listen port:", port)
 			http.Serve(listener, mux)
 		}(v.ListenPort)
 	}
-	app.ECS.Run()
-	go app.RunAccessCountCollector()
+
+	m.ECS.Run()
+	go m.RunAccessCountCollector()
 	log.Println("[info] Launch succeeded!")
 
 	wg.Wait()

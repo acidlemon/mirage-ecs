@@ -17,7 +17,7 @@ import (
 func TestLoadParameter(t *testing.T) {
 	testFile := "config_sample.yml"
 	cfg, _ := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: testFile})
-	app := mirageecs.NewWebApi(cfg)
+	app := mirageecs.NewWebApi(cfg, nil)
 
 	params := url.Values{}
 	params.Set("nick", "mirageman")
@@ -82,7 +82,7 @@ parameters:
 	if err != nil {
 		t.Error(err)
 	}
-	app = mirageecs.NewWebApi(cfg)
+	app = mirageecs.NewWebApi(cfg, nil)
 
 	c = rocket.NewContext(req, args, nil)
 	parameter, err = app.LoadParameter(c)

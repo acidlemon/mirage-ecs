@@ -19,14 +19,16 @@ type ECSLocal struct {
 
 	stopServers map[string]func()
 	cfg         *Config
+	mirage      *Mirage
 }
 
-func NewECSLocal(cfg *Config) *ECSLocal {
+func NewECSLocal(cfg *Config, m *Mirage) *ECSLocal {
 	// NewECSLocal returns a new ECSLocal instance.
 	return &ECSLocal{
 		Informations: map[string]Information{},
 		stopServers:  map[string]func(){},
 		cfg:          cfg,
+		mirage:       m,
 	}
 }
 
@@ -70,7 +72,7 @@ func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...
 		tags: option.ToECSTags(subdomain, ecs.cfg.Parameter),
 	}
 	ecs.stopServers[id] = stopServer
-	app.ReverseProxy.AddSubdomain(subdomain, "127.0.0.1", port)
+	ecs.mirage.ReverseProxy.AddSubdomain(subdomain, "127.0.0.1", port)
 	return nil
 }
 
@@ -95,7 +97,7 @@ func (ecs *ECSLocal) TerminateBySubdomain(subdomain string) error {
 		if stopServer != nil {
 			stopServer()
 		}
-		app.ReverseProxy.RemoveSubdomain(info.SubDomain)
+		ecs.mirage.ReverseProxy.RemoveSubdomain(info.SubDomain)
 		delete(ecs.Informations, subdomain)
 	}
 	return nil

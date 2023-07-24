@@ -22,10 +22,11 @@ const PurgeMinimumDuration = 5 * time.Minute
 
 type WebApi struct {
 	rocket.WebApp
-	cfg *Config
+	cfg    *Config
+	mirage *Mirage
 }
 
-func NewWebApi(cfg *Config) *WebApi {
+func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 	app := &WebApi{}
 	app.Init()
 	app.cfg = cfg
@@ -55,7 +56,7 @@ func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *WebApi) List(c rocket.CtxData) {
-	info, err := app.ECS.List(statusRunning)
+	info, err := api.mirage.ECS.List(statusRunning)
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
@@ -100,7 +101,7 @@ func (api *WebApi) Terminate(c rocket.CtxData) {
 }
 
 func (api *WebApi) ApiList(c rocket.CtxData) {
-	info, err := app.ECS.List(statusRunning)
+	info, err := api.mirage.ECS.List(statusRunning)
 	var status interface{}
 	if err != nil {
 		status = err.Error()
@@ -174,7 +175,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	if subdomain == "" || len(taskdefs) == 0 {
 		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := app.ECS.Launch(subdomain, parameter, taskdefs...)
+		err := api.mirage.ECS.Launch(subdomain, parameter, taskdefs...)
 		if err != nil {
 			log.Println("[error] launch failed: ", err)
 			status = err.Error()
@@ -228,7 +229,7 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 		}
 	}
 
-	logs, err := app.ECS.Logs(subdomain, sinceTime, tailN)
+	logs, err := api.mirage.ECS.Logs(subdomain, sinceTime, tailN)
 	if err != nil {
 		return rocket.RenderVars{
 			"result": err.Error(),
@@ -251,11 +252,11 @@ func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
 	id, _ := c.ParamSingle("id")
 	subdomain, _ := c.ParamSingle("subdomain")
 	if id != "" {
-		if err := app.ECS.Terminate(id); err != nil {
+		if err := api.mirage.ECS.Terminate(id); err != nil {
 			status = err.Error()
 		}
 	} else if subdomain != "" {
-		if err := app.ECS.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.mirage.ECS.TerminateBySubdomain(subdomain); err != nil {
 			status = err.Error()
 		}
 	} else {
@@ -277,7 +278,7 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 		durationInt = 86400 // 24 hours
 	}
 	d := time.Duration(durationInt) * time.Second
-	sum, err := app.GetAccessCount(subdomain, d)
+	sum, err := api.mirage.GetAccessCount(subdomain, d)
 	if err != nil {
 		c.Res().StatusCode = http.StatusInternalServerError
 		log.Println("[error] access counter failed: ", err)
@@ -378,7 +379,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
-	infos, err := app.ECS.List(statusRunning)
+	infos, err := api.mirage.ECS.List(statusRunning)
 	if err != nil {
 		c.Res().StatusCode = http.StatusInternalServerError
 		log.Println("[error] list ecs failed: ", err)
@@ -407,7 +408,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {
-		go purgeSubdomains(terminates, duration)
+		go api.purgeSubdomains(terminates, duration)
 	}
 
 	return rocket.RenderVars{
@@ -415,9 +416,9 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	}
 }
 
-func purgeSubdomains(subdomains []string, duration time.Duration) {
-	if app.TryLock() {
-		defer app.Unlock()
+func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) {
+	if api.mirage.TryLock() {
+		defer api.mirage.Unlock()
 	} else {
 		log.Println("[info] skip purge subdomains, another purge is running")
 		return
@@ -425,7 +426,7 @@ func purgeSubdomains(subdomains []string, duration time.Duration) {
 	log.Printf("[info] start purge subdomains %d", len(subdomains))
 	purged := 0
 	for _, subdomain := range subdomains {
-		sum, err := app.GetAccessCount(subdomain, duration)
+		sum, err := api.mirage.GetAccessCount(subdomain, duration)
 		if err != nil {
 			log.Printf("[warn] access count failed: %s %s", subdomain, err)
 			continue
@@ -434,7 +435,7 @@ func purgeSubdomains(subdomains []string, duration time.Duration) {
 			log.Printf("[info] skip purge %s %d access", subdomain, sum)
 			continue
 		}
-		if err := app.ECS.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.mirage.ECS.TerminateBySubdomain(subdomain); err != nil {
 			log.Printf("[warn] terminate failed %s %s", subdomain, err)
 		} else {
 			purged++

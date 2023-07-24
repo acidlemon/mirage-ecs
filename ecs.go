@@ -118,12 +118,13 @@ type ECS struct {
 	CloudWatchLogs *cloudwatchlogs.CloudWatchLogs
 
 	proxyCh chan *proxyControl
+	mirage  *Mirage
 }
 
-func NewECS(cfg *Config) ECSInterface {
+func NewECS(cfg *Config, m *Mirage) ECSInterface {
 	if cfg.localMode {
 		log.Println("[info] running in local mode with mock ECS.")
-		return NewECSLocal(cfg)
+		return NewECSLocal(cfg, m)
 	}
 
 	ecs := &ECS{
@@ -131,6 +132,7 @@ func NewECS(cfg *Config) ECSInterface {
 		ECS:            ecs.New(cfg.session),
 		CloudWatchLogs: cloudwatchlogs.New(cfg.session),
 		proxyCh:        make(chan *proxyControl, 10),
+		mirage:         m,
 	}
 	return ecs
 }
@@ -141,8 +143,8 @@ func (d *ECS) Run() {
 
 func (d *ECS) syncToMirage() {
 	log.Println("[debug] starting up ECS.syncToMirage()")
-	rp := app.ReverseProxy
-	r53 := app.Route53
+	rp := d.mirage.ReverseProxy
+	r53 := d.mirage.Route53
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
