@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/samber/lo"
 	"gopkg.in/acidlemon/rocket.v2"
 )
@@ -290,8 +292,8 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 	}
 }
 
-func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
-	var parameter map[string]string = make(map[string]string)
+func (api *WebApi) loadParameter(c rocket.CtxData) (TaskParameter, error) {
+	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {
 		param, _ := c.ParamSingle(v.Name)
@@ -309,7 +311,9 @@ func (api *WebApi) loadParameter(c rocket.CtxData) (map[string]string, error) {
 				return nil, fmt.Errorf("parameter %s value is rule error", v.Name)
 			}
 		}
-
+		if utf8.RuneCountInString(param) > 255 {
+			return nil, fmt.Errorf("parameter %s value is too long(max 255 unicode characters)", v.Name)
+		}
 		parameter[v.Name] = param
 	}
 
@@ -334,6 +338,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	}
 
 	excludes, _ := c.Param("excludes")
+	excludeTags, _ := c.Param("exclude_tags")
 	d, _ := c.ParamSingle("duration")
 	di, err := strconv.ParseInt(d, 10, 64)
 	mininum := int64(PurgeMinimumDuration.Seconds())
@@ -353,6 +358,23 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	for _, exclude := range excludes {
 		excludesMap[exclude] = struct{}{}
 	}
+	excludeTagsMap := make(map[string]string, len(excludeTags))
+	for _, excludeTag := range excludeTags {
+		p := strings.SplitN(excludeTag, ":", 2)
+		if len(p) != 2 {
+			c.Res().StatusCode = http.StatusBadRequest
+			msg := fmt.Sprintf("[error] invalid exclude_tags format %s", excludeTag)
+			if err != nil {
+				msg += ": " + err.Error()
+			}
+			log.Println(msg)
+			return rocket.RenderVars{
+				"result": msg,
+			}
+		}
+		k, v := p[0], p[1]
+		excludeTagsMap[k] = v
+	}
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
@@ -370,8 +392,15 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 			log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
 			continue
 		}
+		for _, t := range info.tags {
+			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
+			if ev, ok := excludeTagsMap[k]; ok && ev == v {
+				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
+				continue
+			}
+		}
 		if info.Created.After(begin) {
-			log.Printf("[info] skip recent created subdomain: %s %s", info.SubDomain, info.Created.Format(time.RFC3339))
+			log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
 			continue
 		}
 		tm[info.SubDomain] = struct{}{}
