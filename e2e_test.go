@@ -91,6 +91,29 @@ func TestE2EAPI(t *testing.T) {
 		}
 	})
 
+	t.Run("/api/purge", func(t *testing.T) {
+		v := url.Values{}
+		v.Add("duration", "300")
+		req, _ := http.NewRequest("POST", ts.URL+"/api/purge", strings.NewReader(v.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			body, _ := io.ReadAll(res.Body)
+			t.Errorf("status code should be 200: %d", res.StatusCode)
+			t.Errorf("body: %s", body)
+			return
+		}
+		var r mirageecs.APIPurgeResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if r.Status != "ok" {
+			t.Errorf("result should be ok %#v", r)
+		}
+	})
+
 	t.Run("/api/terminate", func(t *testing.T) {
 		v := url.Values{}
 		v.Add("subdomain", "mytask")
