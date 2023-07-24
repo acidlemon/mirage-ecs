@@ -161,6 +161,69 @@ You can add any custom parameters. "rule" option is regexp string.
 
 These parameters are passed to ECS task as environment variables.
 
+##### default value
+
+A parameter can have a default value. The default value is used when the parameter is not specified.
+
+```yaml
+
+```yaml
+parameters:
+  - name: foo
+    env: FOO
+    default: bar
+```
+
+##### regexp rule
+
+A parameter can have a regexp rule. The rule is used to validate the parameter value.
+
+```yaml
+parameters:
+  - name: foo
+    env: FOO
+    rule: "^[a-z]+$"
+```
+
+##### description
+
+A parameter can have a description. The description is used to show the parameter in the web interface.
+
+```yaml
+parameters:
+  - name: foo
+    env: FOO
+    description: "foo parameter"
+```
+
+##### required
+
+A parameter can be required. If the parameter is required, mirage-ecs returns an error when the parameter is not specified.
+
+This option can use with `default` option.
+
+```yaml
+parameters:
+  - name: foo
+    env: FOO
+    required: true
+```
+
+##### options
+
+A parameter defines selectable options. The options are used to create a select box in the web interface.
+
+```yaml
+parameters:
+  - name: foo
+    env: FOO
+    options:
+      - label: bar  # if label is not specified, use value
+        value: bar
+      - label: baz
+        value: baz
+```
+
 #### `htmldir` section
 
 `htmldir` section configures directory of mirage-ecs webapi template files.

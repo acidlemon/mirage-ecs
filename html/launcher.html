@@ -15,7 +15,8 @@
   {{ if $param.Options }}
   <select name="{{ $param.Name }}" id="{{ $param.Name }}" class="col-md-5">
     {{ range $option := $param.Options }}
-    <option value="{{ $option }}" {{ if eq $option $param.Default }}selected{{ end }}>{{ $option }}</option>
+    <option value="{{ $option.Value }}" {{ if eq $option.Value $param.Default }}selected{{ end }}>{{ or $option.Label
+      $option.Value }}</option>
     {{ end }}
   </select>
   {{ else }}
