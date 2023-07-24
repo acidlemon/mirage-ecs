@@ -12,6 +12,10 @@ type APICommonResponse struct {
 	Result string `json:"result"`
 }
 
+type APILogsResponse struct {
+	Result []string `json:"result"`
+}
+
 // APIPurgeResponse is a response of /api/purge
 type APIPurgeResponse struct {
 	Status string `json:"status"`

@@ -36,20 +36,13 @@ func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 	app.Init()
 	app.cfg = cfg
 
-	view := &rocket.View{
-		BasicTemplates: []string{cfg.HtmlDir + "/layout.html"},
-	}
-
-	app.AddRoute("/", app.List, view)
-	app.AddRoute("/launcher", app.Launcher, view)
-
 	e := echo.New()
 	e.GET("/api/list", app.ApiList)
 	e.POST("/api/launch", app.ApiLaunch)
 	e.POST("/api/terminate", app.ApiTerminate)
 	e.POST("/api/purge", app.ApiPurge)
 	e.GET("/api/access", app.ApiAccess)
-	// e.GET("/api/logs", app.ApiLogs)
+	e.GET("/api/logs", app.ApiLogs)
 	app.echo = e
 
 	app.BuildRouter()
@@ -161,10 +154,12 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	return http.StatusOK, nil
 }
 
-func (api *WebApi) ApiLogs(c rocket.CtxData) {
-	result := api.logs(c)
-
-	c.RenderJSON(result)
+func (api *WebApi) ApiLogs(c echo.Context) error {
+	code, logs, err := api.logs(c)
+	if err != nil {
+		return c.JSON(code, APICommonResponse{Result: err.Error()})
+	}
+	return c.JSON(code, APILogsResponse{Result: logs})
 }
 
 func (api *WebApi) ApiTerminate(c echo.Context) error {
@@ -191,21 +186,13 @@ func (api *WebApi) ApiPurge(c echo.Context) error {
 	return c.JSON(code, APIPurgeResponse{Status: "ok"})
 }
 
-func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
-	if c.Req().Method != "GET" {
-		c.Res().StatusCode = http.StatusMethodNotAllowed
-		c.RenderText("you must use GET")
-		return rocket.RenderVars{}
-	}
-
-	subdomain, _ := c.ParamSingle("subdomain")
-	since, _ := c.ParamSingle("since")
-	tail, _ := c.ParamSingle("tail")
+func (api *WebApi) logs(c echo.Context) (int, []string, error) {
+	subdomain := c.QueryParam("subdomain")
+	since := c.QueryParam("since")
+	tail := c.QueryParam("tail")
 
 	if subdomain == "" {
-		return rocket.RenderVars{
-			"result": "parameter required: subdomain",
-		}
+		return http.StatusBadRequest, nil, fmt.Errorf("parameter required: subdomain")
 	}
 
 	var sinceTime time.Time
@@ -213,9 +200,7 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 		var err error
 		sinceTime, err = time.Parse(time.RFC3339, since)
 		if err != nil {
-			return rocket.RenderVars{
-				"result": fmt.Sprintf("cannot parse since: %s", err),
-			}
+			return http.StatusBadRequest, nil, fmt.Errorf("cannot parse since: %s", err)
 		}
 	}
 	var tailN int
@@ -223,9 +208,7 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 		if tail == "all" {
 			tailN = 0
 		} else if n, err := strconv.Atoi(tail); err != nil {
-			return rocket.RenderVars{
-				"result": fmt.Sprintf("cannot parse tail: %s", err),
-			}
+			return http.StatusBadRequest, nil, fmt.Errorf("cannot parse tail: %s", err)
 		} else {
 			tailN = n
 		}
@@ -233,13 +216,9 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 
 	logs, err := api.mirage.ECS.Logs(subdomain, sinceTime, tailN)
 	if err != nil {
-		return rocket.RenderVars{
-			"result": err.Error(),
-		}
+		return http.StatusInternalServerError, nil, err
 	}
-	return rocket.RenderVars{
-		"result": logs,
-	}
+	return http.StatusOK, logs, nil
 }
 
 func (api *WebApi) terminate(c echo.Context) (int, error) {
