@@ -31,7 +31,67 @@ type Information struct {
 	PortMap    map[string]int    `json:"port_map"`
 	Env        map[string]string `json:"env"`
 
+	tags []*ecs.Tag
 	task *ecs.Task
+}
+
+type TaskParameter map[string]string
+
+func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters) []*ecs.KeyValuePair {
+	kvp := make([]*ecs.KeyValuePair, 0, len(p)+1)
+	kvp = append(kvp, &ecs.KeyValuePair{
+		Name:  aws.String(strings.ToUpper(TagSubdomain)),
+		Value: aws.String(encodeTagValue(subdomain)),
+	})
+	for _, v := range configParams {
+		v := v
+		if p[v.Name] == "" {
+			continue
+		}
+		kvp = append(kvp, &ecs.KeyValuePair{
+			Name:  aws.String(v.Env),
+			Value: aws.String(p[v.Name]),
+		})
+	}
+	return kvp
+}
+
+func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []*ecs.Tag {
+	tags := make([]*ecs.Tag, 0, len(p)+2)
+	tags = append(tags,
+		&ecs.Tag{
+			Key:   aws.String(TagSubdomain),
+			Value: aws.String(encodeTagValue(subdomain)),
+		},
+		&ecs.Tag{
+			Key:   aws.String(TagManagedBy),
+			Value: aws.String(TagValueMirage),
+		},
+	)
+	for _, v := range configParams {
+		v := v
+		if p[v.Name] == "" {
+			continue
+		}
+		tags = append(tags, &ecs.Tag{
+			Key:   aws.String(v.Name),
+			Value: aws.String(p[v.Name]),
+		})
+	}
+	return tags
+}
+
+func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[string]string {
+	env := make(map[string]string, len(p)+1)
+	env[strings.ToUpper(TagSubdomain)] = encodeTagValue(subdomain)
+	for _, v := range configParams {
+		v := v
+		if p[v.Name] == "" {
+			continue
+		}
+		env[strings.ToUpper(v.Env)] = p[v.Name]
+	}
+	return env
 }
 
 const (
@@ -45,7 +105,7 @@ const (
 
 type ECSInterface interface {
 	Run()
-	Launch(subdomain string, option map[string]string, taskdefs ...string) error
+	Launch(subdomain string, param TaskParameter, taskdefs ...string) error
 	Logs(subdomain string, since time.Time, tail int) ([]string, error)
 	Terminate(subdomain string) error
 	TerminateBySubdomain(subdomain string) error
@@ -139,7 +199,7 @@ SYNC:
 	}
 }
 
-func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyValuePair) error {
+func (d *ECS) launchTask(subdomain string, taskdef string, option TaskParameter) error {
 	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
 	tdOut, err := d.ECS.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
@@ -150,18 +210,21 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 
 	// override envs for each container in taskdef
 	ov := &ecs.TaskOverride{}
+	env := option.ToECSKeyValuePairs(subdomain, d.cfg.Parameter)
+
 	for _, c := range tdOut.TaskDefinition.ContainerDefinitions {
 		name := *c.Name
 		ov.ContainerOverrides = append(
 			ov.ContainerOverrides,
 			&ecs.ContainerOverride{
 				Name:        aws.String(name),
-				Environment: dockerEnv,
+				Environment: env,
 			},
 		)
 	}
 	log.Printf("[debug] Task Override: %s", ov)
 
+	tags := option.ToECSTags(subdomain, d.cfg.Parameter)
 	runtaskInput := &ecs.RunTaskInput{
 		CapacityProviderStrategy: d.cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(d.cfg.ECS.Cluster),
@@ -170,11 +233,8 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 		LaunchType:               d.cfg.ECS.LaunchType,
 		Overrides:                ov,
 		Count:                    aws.Int64(1),
-		Tags: []*ecs.Tag{
-			{Key: aws.String(TagSubdomain), Value: aws.String(encodeTagValue(subdomain))},
-			{Key: aws.String(TagManagedBy), Value: aws.String(TagValueMirage)},
-		},
-		EnableExecuteCommand: d.cfg.ECS.EnableExecuteCommand,
+		Tags:                     tags,
+		EnableExecuteCommand:     d.cfg.ECS.EnableExecuteCommand,
 	}
 	log.Printf("[debug] RunTaskInput: %s", runtaskInput)
 	out, err := d.ECS.RunTask(runtaskInput)
@@ -192,7 +252,7 @@ func (d *ECS) launchTask(subdomain string, taskdef string, dockerEnv []*ecs.KeyV
 	return nil
 }
 
-func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...string) error {
+func (d *ECS) Launch(subdomain string, option TaskParameter, taskdefs ...string) error {
 	if infos, err := d.find(subdomain); err != nil {
 		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
 	} else if len(infos) > 0 {
@@ -204,28 +264,12 @@ func (d *ECS) Launch(subdomain string, option map[string]string, taskdefs ...str
 	}
 
 	log.Printf("[info] launching subdomain:%s taskdefs:%v", subdomain, taskdefs)
-	var dockerEnv []*ecs.KeyValuePair
-
-	for _, v := range d.cfg.Parameter {
-		v := v
-		if option[v.Name] == "" {
-			continue
-		}
-		dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-			Name:  aws.String(v.Env),
-			Value: aws.String(option[v.Name]),
-		})
-	}
-	dockerEnv = append(dockerEnv, &ecs.KeyValuePair{
-		Name:  aws.String("SUBDOMAIN"),
-		Value: aws.String(encodeTagValue(subdomain)),
-	})
 
 	var eg errgroup.Group
 	for _, taskdef := range taskdefs {
 		taskdef := taskdef
 		eg.Go(func() error {
-			return d.launchTask(subdomain, taskdef, dockerEnv)
+			return d.launchTask(subdomain, taskdef, option)
 		})
 	}
 	return eg.Wait()
@@ -407,6 +451,7 @@ func (d *ECS) List(desiredStatus string) ([]Information, error) {
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
 				Env:        getEnvironmentsFromTask(task),
+				tags:       task.Tags,
 				task:       task,
 			}
 			if portMap, err := d.portMapInTask(task); err != nil {
