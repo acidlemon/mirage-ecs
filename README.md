@@ -93,6 +93,10 @@ After `foo-*` is terminated, `foo-bar-baz` matches 2 and 3, but mirage-ecs prefe
 1. Press "Terminate" button.
 
 
+![](docs/mirage-ecs-list.png)
+
+![](docs/mirage-ecs-launcher.png)
+
 ### Full Configuration
 
 mirage-ecs can be configured by a config file.
