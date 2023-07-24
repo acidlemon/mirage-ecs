@@ -3,6 +3,8 @@ package mirageecs
 import (
 	"errors"
 	"fmt"
+	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"path"
@@ -15,7 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
-	"gopkg.in/acidlemon/rocket.v2"
 )
 
 var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\[\]]{0,61}[a-zA-Z0-9*?\[\]]$`)
@@ -23,85 +24,85 @@ var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\
 const PurgeMinimumDuration = 5 * time.Minute
 
 type WebApi struct {
-	rocket.WebApp
 	cfg    *Config
 	mirage *Mirage
 	echo   *echo.Echo
+}
+
+type Template struct {
+	templates *template.Template
+}
+
+func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+	return t.templates.ExecuteTemplate(w, name, data)
 }
 
 func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 	app := &WebApi{
 		mirage: m,
 	}
-	app.Init()
 	app.cfg = cfg
 
 	e := echo.New()
+	e.GET("/", app.List)
+	e.GET("/launcher", app.Launcher)
+	e.POST("/launch", app.Launch)
+	e.POST("/terminate", app.Terminate)
+
 	e.GET("/api/list", app.ApiList)
 	e.POST("/api/launch", app.ApiLaunch)
 	e.POST("/api/terminate", app.ApiTerminate)
 	e.POST("/api/purge", app.ApiPurge)
 	e.GET("/api/access", app.ApiAccess)
 	e.GET("/api/logs", app.ApiLogs)
+	e.Renderer = &Template{
+		templates: template.Must(template.ParseGlob(cfg.HtmlDir + "/*")),
+	}
 	app.echo = e
-
-	app.BuildRouter()
 
 	return app
 }
 
 func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if strings.HasPrefix(req.URL.Path, "/api") {
-		api.echo.ServeHTTP(w, req)
-	} else {
-		api.Handler(w, req)
-	}
+	api.echo.ServeHTTP(w, req)
 }
 
-func (api *WebApi) List(c rocket.CtxData) {
+func (api *WebApi) List(c echo.Context) error {
 	info, err := api.mirage.ECS.List(statusRunning)
-	errStr := ""
-	if err != nil {
-		errStr = err.Error()
-	}
-	value := rocket.RenderVars{
+	value := map[string]interface{}{
 		"info":  info,
-		"error": errStr,
+		"error": err,
 	}
-
-	c.Render(api.cfg.HtmlDir+"/list.html", value)
+	return c.Render(http.StatusOK, "list.html", value)
 }
 
-func (api *WebApi) Launcher(c rocket.CtxData) {
+func (api *WebApi) Launcher(c echo.Context) error {
 	var taskdefs []string
 	if api.cfg.Link.DefaultTaskDefinitions != nil {
 		taskdefs = api.cfg.Link.DefaultTaskDefinitions
 	} else {
 		taskdefs = []string{api.cfg.ECS.DefaultTaskDefinition}
 	}
-	c.Render(api.cfg.HtmlDir+"/launcher.html", rocket.RenderVars{
+	return c.Render(http.StatusOK, "launcher.html", map[string]interface{}{
 		"DefaultTaskDefinitions": taskdefs,
 		"Parameters":             api.cfg.Parameter,
 	})
 }
 
-func (api *WebApi) Launch(c rocket.CtxData) {
-	/*
-		result := api.launch()
-		if result["result"] == "ok" {
-			c.Redirect("/")
-		} else {
-			c.RenderJSON(result)
-		}
-	*/
+func (api *WebApi) Launch(c echo.Context) error {
+	code, err := api.launch(c)
+	if err != nil {
+		return c.String(code, err.Error())
+	}
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (api *WebApi) Terminate(c echo.Context) error {
 	code, err := api.terminate(c)
 	if err != nil {
-		c.JSON(code, APICommonResponse{Result: err.Error()})
+		c.String(code, err.Error())
 	}
-	return c.Redirect(http.StatusFound, "/")
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {

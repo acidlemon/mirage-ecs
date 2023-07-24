@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	mirageecs "github.com/acidlemon/mirage-ecs"
-	"gopkg.in/acidlemon/rocket.v2"
+	"github.com/labstack/echo/v4"
 )
 
 func TestLoadParameter(t *testing.T) {
@@ -29,10 +29,9 @@ func TestLoadParameter(t *testing.T) {
 		t.Error(err)
 	}
 
-	args := rocket.Args{}
-	c := rocket.NewContext(req, args, nil)
-
-	parameter, err := app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
+	e := echo.New()
+	c := e.NewContext(req, nil)
+	parameter, err := app.LoadParameter(c.FormValue)
 
 	if err != nil {
 		t.Error(err)
@@ -84,8 +83,8 @@ parameters:
 	}
 	app = mirageecs.NewWebApi(cfg, nil)
 
-	c = rocket.NewContext(req, args, nil)
-	parameter, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
+	c = e.NewContext(req, nil)
+	parameter, err = app.LoadParameter(c.FormValue)
 	if err != nil {
 		t.Error(err)
 	}
@@ -108,8 +107,8 @@ parameters:
 		t.Error(err)
 	}
 
-	c = rocket.NewContext(req, args, nil)
-	_, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
+	c = e.NewContext(req, nil)
+	_, err = app.LoadParameter(c.FormValue)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -124,8 +123,8 @@ parameters:
 		t.Error(err)
 	}
 
-	c = rocket.NewContext(req, args, nil)
-	_, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
+	c = e.NewContext(req, nil)
+	_, err = app.LoadParameter(c.FormValue)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
