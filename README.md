@@ -166,8 +166,6 @@ These parameters are passed to ECS task as environment variables and tags of the
 A parameter can have a default value. The default value is used when the parameter is not specified.
 
 ```yaml
-
-```yaml
 parameters:
   - name: foo
     env: FOO
