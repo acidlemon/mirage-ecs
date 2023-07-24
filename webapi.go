@@ -160,7 +160,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 
 	taskdefs, _ := c.Param("taskdef")
 
-	parameter, err := api.loadParameter(c)
+	parameter, err := api.LoadParameter(c)
 	if err != nil {
 		result := rocket.RenderVars{
 			"result": err.Error(),
@@ -292,7 +292,7 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 	}
 }
 
-func (api *WebApi) loadParameter(c rocket.CtxData) (TaskParameter, error) {
+func (api *WebApi) LoadParameter(c rocket.CtxData) (TaskParameter, error) {
 	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {

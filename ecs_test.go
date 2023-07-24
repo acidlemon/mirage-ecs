@@ -1,4 +1,4 @@
-package mirageecs
+package mirageecs_test
 
 import (
 	"testing"
@@ -6,13 +6,15 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/google/go-cmp/cmp"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestToECSKeyValuePairsAndTags(t *testing.T) {
 	tests := []struct {
 		name         string
-		taskParam    TaskParameter
-		configParams Parameters
+		taskParam    mirageecs.TaskParameter
+		configParams mirageecs.Parameters
 		subdomain    string
 		expectedKVP  []*ecs.KeyValuePair
 		expectedTags []*ecs.Tag
@@ -20,14 +22,14 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 	}{
 		{
 			name: "Basic Test",
-			taskParam: TaskParameter{
+			taskParam: mirageecs.TaskParameter{
 				"Param1": "Value1",
 				"Param2": "Value2",
 			},
-			configParams: Parameters{
-				&Parameter{Name: "Param1", Env: "ENV1"},
-				&Parameter{Name: "Param2", Env: "ENV2"},
-				&Parameter{Name: "Param3", Env: "ENV3"},
+			configParams: mirageecs.Parameters{
+				&mirageecs.Parameter{Name: "Param1", Env: "ENV1"},
+				&mirageecs.Parameter{Name: "Param2", Env: "ENV2"},
+				&mirageecs.Parameter{Name: "Param3", Env: "ENV3"},
 			},
 			subdomain: "testsubdomain",
 			expectedKVP: []*ecs.KeyValuePair{
@@ -37,7 +39,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			},
 			expectedTags: []*ecs.Tag{
 				{Key: aws.String("Subdomain"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
-				{Key: aws.String("ManagedBy"), Value: aws.String(TagValueMirage)},
+				{Key: aws.String("ManagedBy"), Value: aws.String(mirageecs.TagValueMirage)},
 				{Key: aws.String("Param1"), Value: aws.String("Value1")},
 				{Key: aws.String("Param2"), Value: aws.String("Value2")},
 			},

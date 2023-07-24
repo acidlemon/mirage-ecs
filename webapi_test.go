@@ -1,4 +1,4 @@
-package mirageecs
+package mirageecs_test
 
 import (
 	"errors"
@@ -10,13 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	mirageecs "github.com/acidlemon/mirage-ecs"
 	"gopkg.in/acidlemon/rocket.v2"
 )
 
 func TestLoadParameter(t *testing.T) {
 	testFile := "config_sample.yml"
-	cfg, _ := NewConfig(&ConfigParams{Path: testFile})
-	app := NewWebApi(cfg)
+	cfg, _ := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: testFile})
+	app := mirageecs.NewWebApi(cfg)
 
 	params := url.Values{}
 	params.Set("nick", "mirageman")
@@ -31,7 +32,7 @@ func TestLoadParameter(t *testing.T) {
 	args := rocket.Args{}
 	c := rocket.NewContext(req, args, nil)
 
-	parameter, err := app.loadParameter(c)
+	parameter, err := app.LoadParameter(c)
 
 	if err != nil {
 		t.Error(err)
@@ -77,14 +78,14 @@ parameters:
 		t.Error(err)
 	}
 
-	cfg, err = NewConfig(&ConfigParams{Path: f.Name()})
+	cfg, err = mirageecs.NewConfig(&mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}
-	app = NewWebApi(cfg)
+	app = mirageecs.NewWebApi(cfg)
 
 	c = rocket.NewContext(req, args, nil)
-	parameter, err = app.loadParameter(c)
+	parameter, err = app.LoadParameter(c)
 
 	if err != nil {
 		t.Error(err)
@@ -109,7 +110,7 @@ parameters:
 	}
 
 	c = rocket.NewContext(req, args, nil)
-	_, err = app.loadParameter(c)
+	_, err = app.LoadParameter(c)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -125,7 +126,7 @@ parameters:
 	}
 
 	c = rocket.NewContext(req, args, nil)
-	_, err = app.loadParameter(c)
+	_, err = app.LoadParameter(c)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -164,13 +165,13 @@ var invalidSubdomains = []string{
 
 func TestValidateSubdomain(t *testing.T) {
 	for _, s := range validSubdomains {
-		if err := validateSubdomain(s); err != nil {
+		if err := mirageecs.ValidateSubdomain(s); err != nil {
 			t.Errorf("%s should be valid", s)
 		}
 	}
 
 	for _, s := range invalidSubdomains {
-		if err := validateSubdomain(s); err == nil {
+		if err := mirageecs.ValidateSubdomain(s); err == nil {
 			t.Errorf("%s should be invalid", s)
 		}
 	}

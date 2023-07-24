@@ -1,12 +1,14 @@
-package mirageecs
+package mirageecs_test
 
 import (
 	"testing"
 	"time"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestAccessCounter(t *testing.T) {
-	c := newAccessCounter(time.Second)
+	c := mirageecs.NewAccessCounter(time.Second)
 	start := time.Now().Truncate(time.Second)
 	c.Add()
 	c.Add()
