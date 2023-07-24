@@ -310,6 +310,7 @@ Parameters:
 - `subdomain`: subdomain of the task. (required)
 - `taskdef`: ECS task definition name (maybe includes revision) for the task. (required)
 - extra parameters: Additional parameters for the task. (optional, defined in config file `parameters` section)
+  - `branch`: branch is appended to extra parameters automatically.
 
 ```json
 {
