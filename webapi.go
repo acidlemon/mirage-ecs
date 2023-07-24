@@ -154,6 +154,7 @@ func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
 	subdomain, _ := c.ParamSingle("subdomain")
 	subdomain = strings.ToLower(subdomain)
 	if err := validateSubdomain(subdomain); err != nil {
+		log.Println("[error] launch failed: ", err)
 		c.Res().StatusCode = http.StatusBadRequest
 		c.RenderText(err.Error())
 		return rocket.RenderVars{}
@@ -322,8 +323,17 @@ func (api *WebApi) LoadParameter(c rocket.CtxData) (TaskParameter, error) {
 }
 
 func validateSubdomain(s string) error {
+	if s == "" {
+		return fmt.Errorf("subdomain is empty")
+	}
+	if len(s) < 2 {
+		return fmt.Errorf("subdomain is too short")
+	}
+	if len(s) > 63 {
+		return fmt.Errorf("subdomain is too long")
+	}
 	if !DNSNameRegexpWithPattern.MatchString(s) {
-		return fmt.Errorf("subdomain includes invalid characters")
+		return fmt.Errorf("subdomain %s includes invalid characters", s)
 	}
 	if _, err := path.Match(s, "x"); err != nil {
 		return err
