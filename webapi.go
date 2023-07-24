@@ -395,12 +395,12 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 		for _, t := range info.tags {
 			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
 			if ev, ok := excludeTagsMap[k]; ok && ev == v {
-				log.Printf("[info] skip exclude tag: %s=%s", k, v)
+				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
 				continue
 			}
 		}
 		if info.Created.After(begin) {
-			log.Printf("[info] skip recent created subdomain: %s %s", info.SubDomain, info.Created.Format(time.RFC3339))
+			log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
 			continue
 		}
 		tm[info.SubDomain] = struct{}{}
