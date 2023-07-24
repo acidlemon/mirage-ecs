@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 	"gopkg.in/acidlemon/rocket.v2"
 )
@@ -24,10 +26,13 @@ type WebApi struct {
 	rocket.WebApp
 	cfg    *Config
 	mirage *Mirage
+	echo   *echo.Echo
 }
 
 func NewWebApi(cfg *Config, m *Mirage) *WebApi {
-	app := &WebApi{mirage: m}
+	app := &WebApi{
+		mirage: m,
+	}
 	app.Init()
 	app.cfg = cfg
 
@@ -37,14 +42,15 @@ func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 
 	app.AddRoute("/", app.List, view)
 	app.AddRoute("/launcher", app.Launcher, view)
-	app.AddRoute("/launch", app.Launch, view)
-	app.AddRoute("/terminate", app.Terminate, view)
-	app.AddRoute("/api/list", app.ApiList, view)
-	app.AddRoute("/api/launch", app.ApiLaunch, view)
-	app.AddRoute("/api/logs", app.ApiLogs, view)
-	app.AddRoute("/api/terminate", app.ApiTerminate, view)
-	app.AddRoute("/api/access", app.ApiAccess, view)
-	app.AddRoute("/api/purge", app.ApiPurge, view)
+
+	e := echo.New()
+	e.GET("/api/list", app.ApiList)
+	e.POST("/api/launch", app.ApiLaunch)
+	e.POST("/api/terminate", app.ApiTerminate)
+	e.POST("/api/purge", app.ApiPurge)
+	e.GET("/api/access", app.ApiAccess)
+	// e.GET("/api/logs", app.ApiLogs)
+	app.echo = e
 
 	app.BuildRouter()
 
@@ -52,7 +58,11 @@ func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 }
 
 func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	api.Handler(w, req)
+	if strings.HasPrefix(req.URL.Path, "/api") {
+		api.echo.ServeHTTP(w, req)
+	} else {
+		api.Handler(w, req)
+	}
 }
 
 func (api *WebApi) List(c rocket.CtxData) {
@@ -83,43 +93,72 @@ func (api *WebApi) Launcher(c rocket.CtxData) {
 }
 
 func (api *WebApi) Launch(c rocket.CtxData) {
-	result := api.launch(c)
-	if result["result"] == "ok" {
-		c.Redirect("/")
-	} else {
-		c.RenderJSON(result)
-	}
+	/*
+		result := api.launch()
+		if result["result"] == "ok" {
+			c.Redirect("/")
+		} else {
+			c.RenderJSON(result)
+		}
+	*/
 }
 
-func (api *WebApi) Terminate(c rocket.CtxData) {
-	result := api.terminate(c)
-	if result["result"] == "ok" {
-		c.Redirect("/")
-	} else {
-		c.RenderJSON(result)
-	}
-}
-
-func (api *WebApi) ApiList(c rocket.CtxData) {
-	info, err := api.mirage.ECS.List(statusRunning)
-	var status interface{}
+func (api *WebApi) Terminate(c echo.Context) error {
+	code, err := api.terminate(c)
 	if err != nil {
-		status = err.Error()
-	} else {
-		status = info
+		c.JSON(code, APICommonResponse{Result: err.Error()})
 	}
-
-	result := rocket.RenderVars{
-		"result": status,
-	}
-
-	c.RenderJSON(result)
+	return c.Redirect(http.StatusFound, "/")
 }
 
-func (api *WebApi) ApiLaunch(c rocket.CtxData) {
-	result := api.launch(c)
+func (api *WebApi) ApiList(c echo.Context) error {
+	info, err := api.mirage.ECS.List(statusRunning)
+	if err != nil {
+		return c.JSON(500, APIListResponse{})
+	}
+	return c.JSON(200, APIListResponse{Result: info})
+}
 
-	c.RenderJSON(result)
+func (api *WebApi) ApiLaunch(c echo.Context) error {
+	code, err := api.launch(c)
+	if err != nil {
+		return c.JSON(code, APICommonResponse{Result: err.Error()})
+	}
+	return c.JSON(code, APICommonResponse{Result: "ok"})
+}
+
+func (api *WebApi) launch(c echo.Context) (int, error) {
+	subdomain := c.FormValue("subdomain")
+	subdomain = strings.ToLower(subdomain)
+	if err := validateSubdomain(subdomain); err != nil {
+		log.Println("[error] launch failed: ", err)
+		return http.StatusBadRequest, err
+	}
+
+	ps, err := c.FormParams()
+	if err != nil {
+		log.Println("[error] failed to get form params: ", err)
+		return http.StatusInternalServerError, err
+	}
+	taskdefs := ps["taskdef"]
+
+	parameter, err := api.LoadParameter(c.FormValue)
+	if err != nil {
+		log.Println("[error] failed to load parameter: ", err)
+		return http.StatusBadRequest, err
+	}
+
+	if subdomain == "" || len(taskdefs) == 0 {
+		return http.StatusBadRequest, fmt.Errorf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
+	} else {
+		err := api.mirage.ECS.Launch(subdomain, parameter, taskdefs...)
+		if err != nil {
+			log.Println("[error] launch failed: ", err)
+			return http.StatusInternalServerError, err
+		}
+	}
+
+	return http.StatusOK, nil
 }
 
 func (api *WebApi) ApiLogs(c rocket.CtxData) {
@@ -128,66 +167,28 @@ func (api *WebApi) ApiLogs(c rocket.CtxData) {
 	c.RenderJSON(result)
 }
 
-func (api *WebApi) ApiTerminate(c rocket.CtxData) {
-	result := api.terminate(c)
-
-	c.RenderJSON(result)
-}
-
-func (api *WebApi) ApiAccess(c rocket.CtxData) {
-	result := api.accessCounter(c)
-	c.RenderJSON(result)
-}
-
-func (api *WebApi) ApiPurge(c rocket.CtxData) {
-	result := api.purge(c)
-	c.RenderJSON(result)
-}
-
-func (api *WebApi) launch(c rocket.CtxData) rocket.RenderVars {
-	if c.Req().Method != "POST" {
-		c.Res().StatusCode = http.StatusMethodNotAllowed
-		c.RenderText("you must use POST")
-		return rocket.RenderVars{}
-	}
-
-	subdomain, _ := c.ParamSingle("subdomain")
-	subdomain = strings.ToLower(subdomain)
-	if err := validateSubdomain(subdomain); err != nil {
-		log.Println("[error] launch failed: ", err)
-		c.Res().StatusCode = http.StatusBadRequest
-		c.RenderText(err.Error())
-		return rocket.RenderVars{}
-	}
-
-	taskdefs, _ := c.Param("taskdef")
-
-	parameter, err := api.LoadParameter(c)
+func (api *WebApi) ApiTerminate(c echo.Context) error {
+	code, err := api.terminate(c)
 	if err != nil {
-		result := rocket.RenderVars{
-			"result": err.Error(),
-		}
-
-		return result
+		return c.JSON(code, APICommonResponse{Result: err.Error()})
 	}
+	return c.JSON(code, APICommonResponse{Result: "ok"})
+}
 
-	status := "ok"
-
-	if subdomain == "" || len(taskdefs) == 0 {
-		status = fmt.Sprintf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
-	} else {
-		err := api.mirage.ECS.Launch(subdomain, parameter, taskdefs...)
-		if err != nil {
-			log.Println("[error] launch failed: ", err)
-			status = err.Error()
-		}
+func (api *WebApi) ApiAccess(c echo.Context) error {
+	code, sum, duration, err := api.accessCounter(c)
+	if err != nil {
+		return c.JSON(code, APICommonResponse{Result: err.Error()})
 	}
+	return c.JSON(code, APIAccessResponse{Result: "ok", Sum: sum, Duration: duration})
+}
 
-	result := rocket.RenderVars{
-		"result": status,
+func (api *WebApi) ApiPurge(c echo.Context) error {
+	code, err := api.purge(c)
+	if err != nil {
+		return c.JSON(code, APICommonResponse{Result: err.Error()})
 	}
-
-	return result
+	return c.JSON(code, APIPurgeResponse{Status: "ok"})
 }
 
 func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
@@ -241,39 +242,26 @@ func (api *WebApi) logs(c rocket.CtxData) rocket.RenderVars {
 	}
 }
 
-func (api *WebApi) terminate(c rocket.CtxData) rocket.RenderVars {
-	if c.Req().Method != "POST" {
-		c.Res().StatusCode = http.StatusMethodNotAllowed
-		c.RenderText("you must use POST")
-		return rocket.RenderVars{}
-	}
-
-	status := "ok"
-
-	id, _ := c.ParamSingle("id")
-	subdomain, _ := c.ParamSingle("subdomain")
+func (api *WebApi) terminate(c echo.Context) (int, error) {
+	id := c.FormValue("id")
+	subdomain := c.FormValue("subdomain")
 	if id != "" {
 		if err := api.mirage.ECS.Terminate(id); err != nil {
-			status = err.Error()
+			return http.StatusInternalServerError, err
 		}
 	} else if subdomain != "" {
 		if err := api.mirage.ECS.TerminateBySubdomain(subdomain); err != nil {
-			status = err.Error()
+			return http.StatusInternalServerError, err
 		}
 	} else {
-		status = "parameter required: id"
+		return http.StatusBadRequest, fmt.Errorf("parameter required: id or subdomain")
 	}
-
-	result := rocket.RenderVars{
-		"result": status,
-	}
-
-	return result
+	return http.StatusOK, nil
 }
 
-func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
-	subdomain, _ := c.ParamSingle("subdomain")
-	duration, _ := c.ParamSingle("duration")
+func (api *WebApi) accessCounter(c echo.Context) (int, int64, int64, error) {
+	subdomain := c.QueryParam("subdomain")
+	duration := c.QueryParam("duration")
 	durationInt, _ := strconv.ParseInt(duration, 10, 64)
 	if durationInt == 0 {
 		durationInt = 86400 // 24 hours
@@ -281,24 +269,17 @@ func (api *WebApi) accessCounter(c rocket.CtxData) rocket.RenderVars {
 	d := time.Duration(durationInt) * time.Second
 	sum, err := api.mirage.GetAccessCount(subdomain, d)
 	if err != nil {
-		c.Res().StatusCode = http.StatusInternalServerError
 		log.Println("[error] access counter failed: ", err)
-		return rocket.RenderVars{
-			"result": err.Error(),
-		}
+		return http.StatusInternalServerError, 0, durationInt, err
 	}
-	return rocket.RenderVars{
-		"result":   "ok",
-		"duration": durationInt,
-		"sum":      sum,
-	}
+	return http.StatusOK, sum, durationInt, nil
 }
 
-func (api *WebApi) LoadParameter(c rocket.CtxData) (TaskParameter, error) {
+func (api *WebApi) LoadParameter(getFunc func(string) string) (TaskParameter, error) {
 	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {
-		param, _ := c.ParamSingle(v.Name)
+		param := getFunc(v.Name)
 		if param == "" && v.Default != "" {
 			param = v.Default
 		}
@@ -341,28 +322,23 @@ func validateSubdomain(s string) error {
 	return nil
 }
 
-func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
-	if c.Req().Method != "POST" {
-		c.Res().StatusCode = http.StatusMethodNotAllowed
-		c.RenderText("you must use POST")
-		return rocket.RenderVars{}
+func (api *WebApi) purge(c echo.Context) (int, error) {
+	ps, err := c.FormParams()
+	if err != nil {
+		return http.StatusInternalServerError, err
 	}
-
-	excludes, _ := c.Param("excludes")
-	excludeTags, _ := c.Param("exclude_tags")
-	d, _ := c.ParamSingle("duration")
+	excludes := ps["excludes"]
+	excludeTags := ps["exclude_tags"]
+	d := c.FormValue("duration")
 	di, err := strconv.ParseInt(d, 10, 64)
 	mininum := int64(PurgeMinimumDuration.Seconds())
 	if err != nil || di < mininum {
-		c.Res().StatusCode = http.StatusBadRequest
-		msg := fmt.Sprintf("[error] invalid duration %s (at least %d)", d, mininum)
+		msg := fmt.Sprintf("invalid duration %s (at least %d)", d, mininum)
 		if err != nil {
 			msg += ": " + err.Error()
 		}
-		log.Println(msg)
-		return rocket.RenderVars{
-			"result": msg,
-		}
+		log.Printf("[error] %s", msg)
+		return http.StatusBadRequest, errors.New(msg)
 	}
 
 	excludesMap := make(map[string]struct{}, len(excludes))
@@ -373,15 +349,12 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	for _, excludeTag := range excludeTags {
 		p := strings.SplitN(excludeTag, ":", 2)
 		if len(p) != 2 {
-			c.Res().StatusCode = http.StatusBadRequest
-			msg := fmt.Sprintf("[error] invalid exclude_tags format %s", excludeTag)
+			msg := fmt.Sprintf("invalid exclude_tags format %s", excludeTag)
 			if err != nil {
 				msg += ": " + err.Error()
 			}
-			log.Println(msg)
-			return rocket.RenderVars{
-				"result": msg,
-			}
+			log.Println("[error]", msg)
+			return http.StatusBadRequest, errors.New(msg)
 		}
 		k, v := p[0], p[1]
 		excludeTagsMap[k] = v
@@ -391,11 +364,8 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 
 	infos, err := api.mirage.ECS.List(statusRunning)
 	if err != nil {
-		c.Res().StatusCode = http.StatusInternalServerError
 		log.Println("[error] list ecs failed: ", err)
-		return rocket.RenderVars{
-			"result": err.Error(),
-		}
+		return http.StatusInternalServerError, err
 	}
 	tm := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
@@ -421,9 +391,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 		go api.purgeSubdomains(terminates, duration)
 	}
 
-	return rocket.RenderVars{
-		"status": "ok",
-	}
+	return http.StatusOK, nil
 }
 
 func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) {

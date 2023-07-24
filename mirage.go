@@ -134,6 +134,10 @@ const (
 )
 
 func (m *Mirage) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+	if m.Config.localMode {
+		log.Println("[info] local mode: skip get metrics")
+		return 0, nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	res, err := m.CloudWatch.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{

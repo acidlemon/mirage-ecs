@@ -32,7 +32,7 @@ func TestLoadParameter(t *testing.T) {
 	args := rocket.Args{}
 	c := rocket.NewContext(req, args, nil)
 
-	parameter, err := app.LoadParameter(c)
+	parameter, err := app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
 
 	if err != nil {
 		t.Error(err)
@@ -85,8 +85,7 @@ parameters:
 	app = mirageecs.NewWebApi(cfg, nil)
 
 	c = rocket.NewContext(req, args, nil)
-	parameter, err = app.LoadParameter(c)
-
+	parameter, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
 	if err != nil {
 		t.Error(err)
 	}
@@ -110,7 +109,7 @@ parameters:
 	}
 
 	c = rocket.NewContext(req, args, nil)
-	_, err = app.LoadParameter(c)
+	_, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -126,7 +125,7 @@ parameters:
 	}
 
 	c = rocket.NewContext(req, args, nil)
-	_, err = app.LoadParameter(c)
+	_, err = app.LoadParameter(func(n string) string { r, _ := c.ParamSingle(n); return r })
 
 	if err == nil {
 		t.Error("Not apply parameter rule")

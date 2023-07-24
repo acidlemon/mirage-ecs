@@ -80,14 +80,33 @@ func TestE2EAPI(t *testing.T) {
 		if len(r.Result) != 1 {
 			t.Errorf("result should be empty %#v", r)
 		}
-		if r.Result[0].Subdomain != "mytask" {
+		if r.Result[0].SubDomain != "mytask" {
 			t.Errorf("subdomain should be mytask %#v", r)
 		}
-		if r.Result[0].Taskdef != "dummy" {
+		if r.Result[0].TaskDef != "dummy" {
 			t.Errorf("taskdef should be dummy %#v", r)
 		}
-		if r.Result[0].Branch != "develop" {
+		if r.Result[0].GitBranch != "develop" {
 			t.Errorf("branch should be develop %#v", r)
+		}
+	})
+
+	t.Run("/api/access", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/access?subdomain=mytask&duration=300")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Errorf("status code should be 200: %d", res.StatusCode)
+		}
+		var r mirageecs.APIAccessResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if r.Result != "ok" {
+			t.Errorf("result should be ok %#v", r)
+		}
+		if r.Duration != 300 {
+			t.Errorf("duration should be 300 %#v", r)
 		}
 	})
 
