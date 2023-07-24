@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	version   string
+	Version   string
 	buildDate string
 )
 
@@ -31,7 +31,7 @@ func main() {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("mirage %v (%v)\n", version, buildDate)
+		fmt.Printf("mirage-ecs %s (%s)\n", Version, buildDate)
 		return
 	}
 
