@@ -159,7 +159,7 @@ parameters:
 
 You can add any custom parameters. "rule" option is regexp string.
 
-These parameters are passed to ECS task as environment variables.
+These parameters are passed to ECS task as environment variables and tags of the task.
 
 ##### default value
 
