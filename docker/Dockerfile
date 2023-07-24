@@ -18,5 +18,5 @@ COPY --from=builder /stash/html/* /opt/mirage/html/
 WORKDIR /opt/mirage
 ENV MIRAGE_LOG_LEVEL info
 ENV MIRAGE_CONF ""
-
+RUN /opt/mirage/mirage-ecs -version
 ENTRYPOINT ["/opt/mirage/mirage-ecs"]

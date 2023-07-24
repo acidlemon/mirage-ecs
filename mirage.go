@@ -42,6 +42,7 @@ func Setup(cfg *Config) {
 }
 
 func Run() {
+	log.Println("[info] mirage-ecs version:", Version)
 	// launch server
 	var wg sync.WaitGroup
 	for _, v := range app.Config.Listen.HTTP {
