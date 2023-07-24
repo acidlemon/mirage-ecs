@@ -159,12 +159,19 @@ type PortMap struct {
 }
 
 type Parameter struct {
-	Name     string        `yaml:"name"`
-	Env      string        `yaml:"env"`
-	Rule     string        `yaml:"rule"`
-	Required bool          `yaml:"required"`
-	Regexp   regexp.Regexp `yaml:"-"`
-	Default  string        `yaml:"default"`
+	Name        string            `yaml:"name"`
+	Env         string            `yaml:"env"`
+	Rule        string            `yaml:"rule"`
+	Required    bool              `yaml:"required"`
+	Regexp      regexp.Regexp     `yaml:"-"`
+	Default     string            `yaml:"default"`
+	Description string            `yaml:"description"`
+	Options     []ParameterOption `yaml:"options"`
+}
+
+type ParameterOption struct {
+	Label string `yaml:"label"`
+	Value string `yaml:"value"`
 }
 
 type Parameters []*Parameter
