@@ -19,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -149,7 +148,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 		TaskDefinition: aws.String(taskdef),
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to describe task definition")
+		return fmt.Errorf("failed to describe task definition: %w", err)
 	}
 
 	// override envs for each container in taskdef
@@ -198,7 +197,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 
 func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
 	if infos, err := e.find(ctx, subdomain); err != nil {
-		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
+		return fmt.Errorf("failed to get subdomain %s: %w", subdomain, err)
 	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
 		err := e.TerminateBySubdomain(ctx, subdomain)
@@ -251,7 +250,7 @@ func (e *ECS) logs(ctx context.Context, info Information, since time.Time, tail 
 		Include:        []types.TaskDefinitionField{types.TaskDefinitionFieldTags},
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to describe task definition")
+		return nil, fmt.Errorf("failed to describe task definition: %w", err)
 	}
 
 	streams := make(map[string][]string)
@@ -365,7 +364,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 			DesiredStatus: types.DesiredStatus(desiredStatus),
 		})
 		if err != nil {
-			return infos, errors.Wrap(err, "failed to list tasks")
+			return infos, fmt.Errorf("failed to list tasks: %w", err)
 		}
 		if len(listOut.TaskArns) == 0 {
 			return infos, nil
@@ -377,7 +376,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 			Include: include,
 		})
 		if err != nil {
-			return infos, errors.Wrap(err, "failed to describe tasks")
+			return infos, fmt.Errorf("failed to describe tasks: %w", err)
 		}
 
 		for _, task := range tasksOut.Tasks {
