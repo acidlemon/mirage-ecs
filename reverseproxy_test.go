@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestReverseProxy(t *testing.T) {
-	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{
+	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{
 		Domain: "example.net",
 	})
 	if err != nil {

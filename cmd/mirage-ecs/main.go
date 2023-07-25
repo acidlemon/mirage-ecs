@@ -51,7 +51,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		Path:        *confFile,
 		LocalMode:   localMode,
 		Domain:      *domain,

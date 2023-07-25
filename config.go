@@ -12,6 +12,9 @@ import (
 	"regexp"
 	"strings"
 
+	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	awsv2Config "github.com/aws/aws-sdk-go-v2/config"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -38,6 +41,7 @@ type Config struct {
 
 	localMode bool
 	session   *session.Session
+	awscfg    *awsv2.Config
 }
 
 type ECSCfg struct {
@@ -185,7 +189,7 @@ type ConfigParams struct {
 
 const DefaultPort = 80
 
-func NewConfig(p *ConfigParams) (*Config, error) {
+func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
 	if !strings.HasPrefix(domain, ".") {
 		domain = "." + domain
@@ -216,6 +220,11 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 	cfg.session = session.Must(session.NewSession(
 		&aws.Config{Region: aws.String(cfg.ECS.Region)},
 	))
+	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
+		return nil, err
+	} else {
+		cfg.awscfg = &awscfg
+	}
 
 	if p.Path == "" {
 		log.Println("[info] no config file specified, using default config with domain suffix: ", domain)

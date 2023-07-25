@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -70,7 +71,7 @@ link:
 		t.Error(err)
 	}
 
-	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: f.Name()})
+	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}

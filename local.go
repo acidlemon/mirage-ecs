@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -128,12 +129,12 @@ func runMockServer(content string) (int, func()) {
 	return port, ts.Close
 }
 
-func (e *LocalTaskRunner) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+func (e *LocalTaskRunner) GetAccessCount(_ context.Context, subdomain string, duration time.Duration) (int64, error) {
 	log.Println("[debug] GetAccessCount is not implemented in LocalTaskRunner")
 	return 0, nil
 }
 
-func (e *LocalTaskRunner) PutAccessCounts(_ map[string]accessCount) error {
+func (e *LocalTaskRunner) PutAccessCounts(_ context.Context, _ map[string]accessCount) error {
 	log.Println("[debug] PutAccessCounts is not implemented in LocalTaskRunner")
 	return nil
 }

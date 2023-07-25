@@ -11,6 +11,7 @@ import (
 	"time"
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
+	ecsv2 "github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
@@ -112,13 +113,14 @@ type TaskRunner interface {
 	TerminateBySubdomain(subdomain string) error
 	List(status string) ([]Information, error)
 	SetProxyControlChannel(ch chan *proxyControl)
-	GetAccessCount(subdomain string, duration time.Duration) (int64, error)
-	PutAccessCounts(map[string]accessCount) error
+	GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error)
+	PutAccessCounts(context.Context, map[string]accessCount) error
 }
 
 type ECS struct {
 	cfg            *Config
 	svc            *ecs.ECS
+	svcV2          *ecsv2.Client
 	logsSvc        *cloudwatchlogs.CloudWatchLogs
 	cwSvc          *cloudwatch.CloudWatch
 	proxyControlCh chan *proxyControl
@@ -520,8 +522,8 @@ func (e *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
 	return portMap, nil
 }
 
-func (e *ECS) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	res, err := e.cwSvc.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{
 		StartTime: aws.Time(time.Now().Add(-duration)),
@@ -558,7 +560,7 @@ func (e *ECS) GetAccessCount(subdomain string, duration time.Duration) (int64, e
 	return sum, nil
 }
 
-func (e *ECS) PutAccessCounts(all map[string]accessCount) error {
+func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) error {
 	pmInput := cloudwatch.PutMetricDataInput{
 		Namespace: aws.String(CloudWatchMetricNameSpace),
 	}
@@ -578,7 +580,7 @@ func (e *ECS) PutAccessCounts(all map[string]accessCount) error {
 			})
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if len(pmInput.MetricData) > 0 {
 		_, err := e.cwSvc.PutMetricDataWithContext(ctx, &pmInput)

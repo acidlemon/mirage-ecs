@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -247,7 +248,7 @@ func (api *WebApi) accessCounter(c echo.Context) (int, int64, int64, error) {
 		durationInt = 86400 // 24 hours
 	}
 	d := time.Duration(durationInt) * time.Second
-	sum, err := api.runner.GetAccessCount(subdomain, d)
+	sum, err := api.runner.GetAccessCount(c.Request().Context(), subdomain, d)
 	if err != nil {
 		log.Println("[error] access counter failed: ", err)
 		return http.StatusInternalServerError, 0, durationInt, err
@@ -368,13 +369,13 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {
-		go api.purgeSubdomains(terminates, duration)
+		go api.purgeSubdomains(context.Background(), terminates, duration)
 	}
 
 	return http.StatusOK, nil
 }
 
-func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) {
+func (api *WebApi) purgeSubdomains(ctx context.Context, subdomains []string, duration time.Duration) {
 	if api.mu.TryLock() {
 		defer api.mu.Unlock()
 	} else {
@@ -384,7 +385,7 @@ func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) 
 	log.Printf("[info] start purge subdomains %d", len(subdomains))
 	purged := 0
 	for _, subdomain := range subdomains {
-		sum, err := api.runner.GetAccessCount(subdomain, duration)
+		sum, err := api.runner.GetAccessCount(ctx, subdomain, duration)
 		if err != nil {
 			log.Printf("[warn] access count failed: %s %s", subdomain, err)
 			continue

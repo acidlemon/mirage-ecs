@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestE2EAPI(t *testing.T) {
-	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{
+	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{
 		LocalMode: true,
 		Domain:    "localtest.me",
 	})

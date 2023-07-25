@@ -129,7 +129,7 @@ func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup
 		all := m.ReverseProxy.CollectAccessCounts()
 		s, _ := json.Marshal(all)
 		log.Printf("[info] access counters: %s", string(s))
-		m.runner.PutAccessCounts(all)
+		m.runner.PutAccessCounts(ctx, all)
 	}
 }
 

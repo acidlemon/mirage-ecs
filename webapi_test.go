@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -16,7 +17,7 @@ import (
 
 func TestLoadParameter(t *testing.T) {
 	testFile := "config_sample.yml"
-	cfg, _ := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: testFile})
+	cfg, _ := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: testFile})
 	app := mirageecs.NewWebApi(cfg, &mirageecs.LocalTaskRunner{})
 
 	params := url.Values{}
@@ -77,7 +78,7 @@ parameters:
 		t.Error(err)
 	}
 
-	cfg, err = mirageecs.NewConfig(&mirageecs.ConfigParams{Path: f.Name()})
+	cfg, err = mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}
