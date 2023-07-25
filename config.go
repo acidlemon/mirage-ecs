@@ -12,14 +12,11 @@ import (
 	"regexp"
 	"strings"
 
-	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsv2Config "github.com/aws/aws-sdk-go-v2/config"
-	ecsV2 "github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	metadata "github.com/brunoscheufler/aws-ecs-metadata-go"
 	config "github.com/kayac/go-config"
 )
@@ -41,8 +38,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 
 	localMode bool
-	session   *session.Session
-	awscfg    *awsv2.Config
+	awscfg    *aws.Config
 }
 
 type ECSCfg struct {
@@ -218,9 +214,6 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		localMode: p.LocalMode,
 	}
 
-	cfg.session = session.Must(session.NewSession(
-		&aws.Config{Region: aws.String(cfg.ECS.Region)},
-	))
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
 		return nil, err
 	} else {
@@ -233,7 +226,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		var content []byte
 		var err error
 		if strings.HasPrefix(p.Path, "s3://") {
-			content, err = loadFromS3(context.TODO(), cfg.session, p.Path)
+			content, err = loadFromS3(context.TODO(), cfg.awscfg, p.Path)
 		} else {
 			content, err = loadFromFile(p.Path)
 		}
@@ -333,8 +326,8 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		c.ECS.Cluster = cluster
 	}
 
-	svc := ecsV2.NewFromConfig(*c.awscfg)
-	if out, err := svc.DescribeTasks(ctx, &ecsV2.DescribeTasksInput{
+	svc := ecs.NewFromConfig(*c.awscfg)
+	if out, err := svc.DescribeTasks(ctx, &ecs.DescribeTasksInput{
 		Cluster: aws.String(cluster),
 		Tasks:   []string{taskArn},
 	}); err != nil {
@@ -343,12 +336,12 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		if len(out.Tasks) == 0 {
 			return fmt.Errorf("cannot find task: %s", taskArn)
 		}
-		group := aws.StringValue(out.Tasks[0].Group)
+		group := aws.ToString(out.Tasks[0].Group)
 		if strings.HasPrefix(group, "service:") {
 			service = group[8:]
 		}
 	}
-	if out, err := svc.DescribeServices(ctx, &ecsV2.DescribeServicesInput{
+	if out, err := svc.DescribeServices(ctx, &ecs.DescribeServicesInput{
 		Cluster:  aws.String(cluster),
 		Services: []string{service},
 	}); err != nil {
@@ -374,8 +367,8 @@ func loadFromFile(p string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-func loadFromS3(ctx context.Context, sess *session.Session, u string) ([]byte, error) {
-	svc := s3.New(sess)
+func loadFromS3(ctx context.Context, awscfg *aws.Config, u string) ([]byte, error) {
+	svc := s3.NewFromConfig(*awscfg)
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return nil, err
@@ -385,7 +378,7 @@ func loadFromS3(ctx context.Context, sess *session.Session, u string) ([]byte, e
 	}
 	bucket := parsed.Host
 	key := strings.TrimPrefix(parsed.Path, "/")
-	out, err := svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
+	out, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})

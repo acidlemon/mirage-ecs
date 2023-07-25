@@ -12,14 +12,13 @@ import (
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
 
-	awsV2 "github.com/aws/aws-sdk-go-v2/aws"
-	ecsV2 "github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	cw "github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
-	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -123,17 +122,17 @@ type TaskRunner interface {
 
 type ECS struct {
 	cfg            *Config
-	svcV2          *ecsV2.Client
-	logsSvc        *cloudwatchlogs.CloudWatchLogs
-	cwSvc          *cloudwatch.CloudWatch
+	svc            *ecs.Client
+	logsSvc        *cwlogs.Client
+	cwSvc          *cw.Client
 	proxyControlCh chan *proxyControl
 }
 
 func NewECSTaskRunner(cfg *Config) TaskRunner {
 	e := &ECS{
 		cfg:     cfg,
-		logsSvc: cloudwatchlogs.New(cfg.session),
-		cwSvc:   cloudwatch.New(cfg.session),
+		logsSvc: cwlogs.NewFromConfig(*cfg.awscfg),
+		cwSvc:   cw.NewFromConfig(*cfg.awscfg),
 	}
 	return e
 }
@@ -146,7 +145,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	cfg := e.cfg
 
 	log.Printf("[info] launching task subdomain:%s taskdef:%s", subdomain, taskdef)
-	tdOut, err := e.svcV2.DescribeTaskDefinition(ctx, &ecsV2.DescribeTaskDefinitionInput{
+	tdOut, err := e.svc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskdef),
 	})
 	if err != nil {
@@ -170,7 +169,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	log.Printf("[debug] Task Override: %v", ov)
 
 	tags := option.ToECSTags(subdomain, cfg.Parameter)
-	runtaskInput := &ecsV2.RunTaskInput{
+	runtaskInput := &ecs.RunTaskInput{
 		CapacityProviderStrategy: cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(cfg.ECS.Cluster),
 		TaskDefinition:           aws.String(taskdef),
@@ -179,10 +178,10 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 		Overrides:                ov,
 		Count:                    aws.Int32(1),
 		Tags:                     tags,
-		EnableExecuteCommand:     awsV2.ToBool(cfg.ECS.EnableExecuteCommand),
+		EnableExecuteCommand:     aws.ToBool(cfg.ECS.EnableExecuteCommand),
 	}
 	log.Printf("[debug] RunTaskInput: %v", runtaskInput)
-	out, err := e.svcV2.RunTask(ctx, runtaskInput)
+	out, err := e.svc.RunTask(ctx, runtaskInput)
 	if err != nil {
 		return err
 	}
@@ -247,7 +246,7 @@ func (e *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 
 func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error) {
 	task := info.task
-	taskdefOut, err := e.svcV2.DescribeTaskDefinition(context.TODO(), &ecsV2.DescribeTaskDefinitionInput{
+	taskdefOut, err := e.svc.DescribeTaskDefinition(context.TODO(), &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: task.TaskDefinitionArn,
 		Include:        []types.TaskDefinitionField{types.TaskDefinitionFieldTags},
 	})
@@ -282,14 +281,14 @@ func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error
 		for _, stream := range streamNames {
 			stream := stream
 			log.Printf("[debug] get log events from group:%s stream:%s start:%s", group, stream, since)
-			in := &cloudwatchlogs.GetLogEventsInput{
+			in := &cwlogs.GetLogEventsInput{
 				LogGroupName:  aws.String(group),
 				LogStreamName: aws.String(stream),
 			}
 			if !since.IsZero() {
 				in.StartTime = aws.Int64(since.Unix() * 1000)
 			}
-			eventsOut, err := e.logsSvc.GetLogEvents(in)
+			eventsOut, err := e.logsSvc.GetLogEvents(context.TODO(), in)
 			if err != nil {
 				log.Printf("[warn] failed to get log events from group %s stream %s: %s", group, stream, err)
 				continue
@@ -308,7 +307,7 @@ func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error
 
 func (e *ECS) Terminate(taskArn string) error {
 	log.Printf("[info] stop task %s", taskArn)
-	_, err := e.svcV2.StopTask(context.TODO(), &ecsV2.StopTaskInput{
+	_, err := e.svc.StopTask(context.TODO(), &ecs.StopTaskInput{
 		Cluster: aws.String(e.cfg.ECS.Cluster),
 		Task:    aws.String(taskArn),
 		Reason:  aws.String("Terminate requested by Mirage"),
@@ -360,7 +359,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 	cluster := aws.String(e.cfg.ECS.Cluster)
 	include := []types.TaskField{types.TaskFieldTags}
 	for {
-		listOut, err := e.svcV2.ListTasks(ctx, &ecsV2.ListTasksInput{
+		listOut, err := e.svc.ListTasks(ctx, &ecs.ListTasksInput{
 			Cluster:       cluster,
 			NextToken:     nextToken,
 			DesiredStatus: types.DesiredStatus(desiredStatus),
@@ -372,7 +371,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 			return infos, nil
 		}
 
-		tasksOut, err := e.svcV2.DescribeTasks(ctx, &ecsV2.DescribeTasksInput{
+		tasksOut, err := e.svc.DescribeTasks(ctx, &ecs.DescribeTasksInput{
 			Cluster: cluster,
 			Tasks:   listOut.TaskArns,
 			Include: include,
@@ -500,7 +499,7 @@ func (e *ECS) portMapInTask(task *types.Task) (map[string]int, error) {
 	td, err := taskDefinitionCache.Get(tdArn)
 	if err != nil && err == ttlcache.ErrNotFound {
 		log.Println("[debug] cache miss for", tdArn)
-		out, err := e.svcV2.DescribeTaskDefinition(context.TODO(), &ecsV2.DescribeTaskDefinitionInput{
+		out, err := e.svc.DescribeTaskDefinition(context.TODO(), &ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: &tdArn,
 		})
 		if err != nil {
@@ -511,7 +510,7 @@ func (e *ECS) portMapInTask(task *types.Task) (map[string]int, error) {
 	} else {
 		log.Println("[debug] cache hit for", tdArn)
 	}
-	if _td, ok := td.(*ecs.TaskDefinition); ok {
+	if _td, ok := td.(*types.TaskDefinition); ok {
 		for _, c := range _td.ContainerDefinitions {
 			for _, m := range c.PortMappings {
 				if m.HostPort == nil {
@@ -520,6 +519,8 @@ func (e *ECS) portMapInTask(task *types.Task) (map[string]int, error) {
 				portMap[*c.Name] = int(*m.HostPort)
 			}
 		}
+	} else {
+		log.Println("[warn] invalid type", td)
 	}
 	return portMap, nil
 }
@@ -527,15 +528,15 @@ func (e *ECS) portMapInTask(task *types.Task) (map[string]int, error) {
 func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	res, err := e.cwSvc.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{
+	res, err := e.cwSvc.GetMetricData(ctx, &cw.GetMetricDataInput{
 		StartTime: aws.Time(time.Now().Add(-duration)),
 		EndTime:   aws.Time(time.Now()),
-		MetricDataQueries: []*cloudwatch.MetricDataQuery{
+		MetricDataQueries: []cwTypes.MetricDataQuery{
 			{
 				Id: aws.String("request_count"),
-				MetricStat: &cloudwatch.MetricStat{
-					Metric: &cloudwatch.Metric{
-						Dimensions: []*cloudwatch.Dimension{
+				MetricStat: &cwTypes.MetricStat{
+					Metric: &cwTypes.Metric{
+						Dimensions: []cwTypes.Dimension{
 							{
 								Name:  aws.String(CloudWatchDimensionName),
 								Value: aws.String(subdomain),
@@ -544,7 +545,7 @@ func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration tim
 						MetricName: aws.String(CloudWatchMetricName),
 						Namespace:  aws.String(CloudWatchMetricNameSpace),
 					},
-					Period: aws.Int64(int64(duration.Seconds())),
+					Period: aws.Int32(int32(duration.Seconds())),
 					Stat:   aws.String("Sum"),
 				},
 			},
@@ -556,24 +557,24 @@ func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration tim
 	var sum int64
 	for _, v := range res.MetricDataResults {
 		for _, vv := range v.Values {
-			sum += int64(aws.Float64Value(vv))
+			sum += int64(vv)
 		}
 	}
 	return sum, nil
 }
 
 func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) error {
-	pmInput := cloudwatch.PutMetricDataInput{
+	pmInput := cw.PutMetricDataInput{
 		Namespace: aws.String(CloudWatchMetricNameSpace),
 	}
 	for subdomain, counters := range all {
 		for ts, count := range counters {
 			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
-			pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
+			pmInput.MetricData = append(pmInput.MetricData, cwTypes.MetricDatum{
 				MetricName: aws.String(CloudWatchMetricName),
 				Timestamp:  aws.Time(ts),
 				Value:      aws.Float64(float64(count)),
-				Dimensions: []*cloudwatch.Dimension{
+				Dimensions: []cwTypes.Dimension{
 					{
 						Name:  aws.String(CloudWatchDimensionName),
 						Value: aws.String(subdomain),
@@ -585,7 +586,7 @@ func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) e
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if len(pmInput.MetricData) > 0 {
-		_, err := e.cwSvc.PutMetricDataWithContext(ctx, &pmInput)
+		_, err := e.cwSvc.PutMetricData(ctx, &pmInput)
 		return err
 	}
 	return nil

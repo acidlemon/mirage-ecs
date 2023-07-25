@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 )
@@ -355,7 +355,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 			continue
 		}
 		for _, t := range info.tags {
-			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
+			k, v := aws.ToString(t.Key), aws.ToString(t.Value)
 			if ev, ok := excludeTagsMap[k]; ok && ev == v {
 				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
 				continue

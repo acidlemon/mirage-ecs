@@ -101,17 +101,17 @@ link:
 	if *provider.CapacityProvider != "test-strategy" {
 		t.Error("could not parse capacity provider strategy")
 	}
-	if *provider.Base != 1 {
+	if provider.Base != 1 {
 		t.Error("could not parse capacity provider strategy")
 	}
 	nc := cfg.ECS.NetworkConfiguration
-	if *nc.AwsVpcConfiguration.AssignPublicIp != "ENABLED" {
+	if nc.AwsVpcConfiguration.AssignPublicIp != "ENABLED" {
 		t.Error("could not parse network configuration")
 	}
-	if *nc.AwsVpcConfiguration.SecurityGroups[0] != "sg-gggg" {
+	if nc.AwsVpcConfiguration.SecurityGroups[0] != "sg-gggg" {
 		t.Error("could not parse network configuration")
 	}
-	if *nc.AwsVpcConfiguration.Subnets[0] != "subnet-aaaa" {
+	if nc.AwsVpcConfiguration.Subnets[0] != "subnet-aaaa" {
 		t.Error("could not parse network configuration")
 	}
 	if !*cfg.ECS.EnableExecuteCommand {
