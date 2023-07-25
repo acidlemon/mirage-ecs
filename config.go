@@ -14,10 +14,11 @@ import (
 
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
 	awsv2Config "github.com/aws/aws-sdk-go-v2/config"
+	ecsV2 "github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	metadata "github.com/brunoscheufler/aws-ecs-metadata-go"
 	config "github.com/kayac/go-config"
@@ -53,8 +54,8 @@ type ECSCfg struct {
 	DefaultTaskDefinition    string                   `yaml:"default_task_definition"`
 	EnableExecuteCommand     *bool                    `yaml:"enable_execute_command"`
 
-	capacityProviderStrategy []*ecs.CapacityProviderStrategyItem `yaml:"-"`
-	networkConfiguration     *ecs.NetworkConfiguration           `yaml:"-"`
+	capacityProviderStrategy []types.CapacityProviderStrategyItem `yaml:"-"`
+	networkConfiguration     *types.NetworkConfiguration          `yaml:"-"`
 }
 
 func (c ECSCfg) String() string {
@@ -89,11 +90,11 @@ func (c ECSCfg) validate() error {
 
 type CapacityProviderStrategy []*CapacityProviderStrategyItem
 
-func (s CapacityProviderStrategy) toSDK() []*ecs.CapacityProviderStrategyItem {
+func (s CapacityProviderStrategy) toSDK() []types.CapacityProviderStrategyItem {
 	if len(s) == 0 {
 		return nil
 	}
-	var items []*ecs.CapacityProviderStrategyItem
+	var items []types.CapacityProviderStrategyItem
 	for _, item := range s {
 		items = append(items, item.toSDK())
 	}
@@ -102,12 +103,12 @@ func (s CapacityProviderStrategy) toSDK() []*ecs.CapacityProviderStrategyItem {
 
 type CapacityProviderStrategyItem struct {
 	CapacityProvider *string `yaml:"capacity_provider"`
-	Weight           *int64  `yaml:"weight"`
-	Base             *int64  `yaml:"base"`
+	Weight           int32   `yaml:"weight"`
+	Base             int32   `yaml:"base"`
 }
 
-func (i CapacityProviderStrategyItem) toSDK() *ecs.CapacityProviderStrategyItem {
-	return &ecs.CapacityProviderStrategyItem{
+func (i CapacityProviderStrategyItem) toSDK() types.CapacityProviderStrategyItem {
+	return types.CapacityProviderStrategyItem{
 		CapacityProvider: i.CapacityProvider,
 		Weight:           i.Weight,
 		Base:             i.Base,
@@ -118,24 +119,24 @@ type NetworkConfiguration struct {
 	AwsVpcConfiguration *AwsVpcConfiguration `yaml:"awsvpc_configuration"`
 }
 
-func (c *NetworkConfiguration) toSDK() *ecs.NetworkConfiguration {
+func (c *NetworkConfiguration) toSDK() *types.NetworkConfiguration {
 	if c == nil {
 		return nil
 	}
-	return &ecs.NetworkConfiguration{
+	return &types.NetworkConfiguration{
 		AwsvpcConfiguration: c.AwsVpcConfiguration.toSDK(),
 	}
 }
 
 type AwsVpcConfiguration struct {
-	AssignPublicIp *string   `yaml:"assign_public_ip"`
-	SecurityGroups []*string `yaml:"security_groups"`
-	Subnets        []*string `yaml:"subnets"`
+	AssignPublicIp string   `yaml:"assign_public_ip"`
+	SecurityGroups []string `yaml:"security_groups"`
+	Subnets        []string `yaml:"subnets"`
 }
 
-func (c *AwsVpcConfiguration) toSDK() *ecs.AwsVpcConfiguration {
-	return &ecs.AwsVpcConfiguration{
-		AssignPublicIp: c.AssignPublicIp,
+func (c *AwsVpcConfiguration) toSDK() *types.AwsVpcConfiguration {
+	return &types.AwsVpcConfiguration{
+		AssignPublicIp: types.AssignPublicIp(c.AssignPublicIp),
 		Subnets:        c.Subnets,
 		SecurityGroups: c.SecurityGroups,
 	}
@@ -302,8 +303,7 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		log.Printf("[info] launch_type and capacity_provider_strategy are not set, using launch_type=%s", *c.ECS.LaunchType)
 	}
 	if c.ECS.EnableExecuteCommand == nil {
-		enableExecuteCommand := true
-		c.ECS.EnableExecuteCommand = &enableExecuteCommand
+		c.ECS.EnableExecuteCommand = aws.Bool(true)
 		log.Printf("[info] enable_execute_command is not set, using enable_execute_command=%t", *c.ECS.EnableExecuteCommand)
 	}
 
@@ -333,10 +333,10 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		c.ECS.Cluster = cluster
 	}
 
-	svc := ecs.New(c.session)
-	if out, err := svc.DescribeTasksWithContext(ctx, &ecs.DescribeTasksInput{
+	svc := ecsV2.NewFromConfig(*c.awscfg)
+	if out, err := svc.DescribeTasks(ctx, &ecsV2.DescribeTasksInput{
 		Cluster: aws.String(cluster),
-		Tasks:   []*string{&taskArn},
+		Tasks:   []string{taskArn},
 	}); err != nil {
 		return err
 	} else {
@@ -348,9 +348,9 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 			service = group[8:]
 		}
 	}
-	if out, err := svc.DescribeServicesWithContext(ctx, &ecs.DescribeServicesInput{
+	if out, err := svc.DescribeServices(ctx, &ecsV2.DescribeServicesInput{
 		Cluster:  aws.String(cluster),
-		Services: []*string{&service},
+		Services: []string{service},
 	}); err != nil {
 		return err
 	} else {

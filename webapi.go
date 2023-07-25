@@ -69,7 +69,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 }
 
 func (api *WebApi) List(c echo.Context) error {
-	info, err := api.runner.List(statusRunning)
+	info, err := api.runner.List(c.Request().Context(), statusRunning)
 	value := map[string]interface{}{
 		"info":  info,
 		"error": err,
@@ -107,7 +107,7 @@ func (api *WebApi) Terminate(c echo.Context) error {
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {
-	info, err := api.runner.List(statusRunning)
+	info, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
 		return c.JSON(500, APIListResponse{})
 	}
@@ -146,7 +146,7 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	if subdomain == "" || len(taskdefs) == 0 {
 		return http.StatusBadRequest, fmt.Errorf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := api.runner.Launch(subdomain, parameter, taskdefs...)
+		err := api.runner.Launch(context.TODO(), subdomain, parameter, taskdefs...)
 		if err != nil {
 			log.Println("[error] launch failed: ", err)
 			return http.StatusInternalServerError, err
@@ -343,7 +343,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
-	infos, err := api.runner.List(statusRunning)
+	infos, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
 		log.Println("[error] list ecs failed: ", err)
 		return http.StatusInternalServerError, err

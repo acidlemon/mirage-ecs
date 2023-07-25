@@ -160,7 +160,7 @@ SYNC:
 			return
 		}
 
-		running, err := app.runner.List(statusRunning)
+		running, err := app.runner.List(ctx, statusRunning)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue
@@ -180,7 +180,7 @@ SYNC:
 			}
 		}
 
-		stopped, err := app.runner.List(statusStopped)
+		stopped, err := app.runner.List(ctx, statusStopped)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue

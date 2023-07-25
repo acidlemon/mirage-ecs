@@ -35,7 +35,7 @@ func (e *LocalTaskRunner) SetProxyControlChannel(ch chan *proxyControl) {
 	e.proxyControlCh = ch
 }
 
-func (e *LocalTaskRunner) List(status string) ([]Information, error) {
+func (e *LocalTaskRunner) List(_ context.Context, status string) ([]Information, error) {
 	infos := make([]Information, 0, len(e.Informations))
 	for _, info := range e.Informations {
 		infos = append(infos, info)
@@ -46,7 +46,7 @@ func (e *LocalTaskRunner) List(status string) ([]Information, error) {
 	return infos, nil
 }
 
-func (e *LocalTaskRunner) Launch(subdomain string, option TaskParameter, taskdefs ...string) error {
+func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
 	if info, ok := e.Informations[subdomain]; ok {
 		return fmt.Errorf("subdomain %s is already used by %s", subdomain, info.ID)
 	}
