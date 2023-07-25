@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -24,9 +25,11 @@ var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\
 const PurgeMinimumDuration = 5 * time.Minute
 
 type WebApi struct {
-	cfg    *Config
-	mirage *Mirage
-	echo   *echo.Echo
+	*echo.Echo
+
+	cfg *Config
+	ecs ECSInterface
+	mu  *sync.Mutex
 }
 
 type Template struct {
@@ -37,9 +40,10 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 
-func NewWebApi(cfg *Config, m *Mirage) *WebApi {
+func NewWebApi(cfg *Config, ecs ECSInterface) *WebApi {
 	app := &WebApi{
-		mirage: m,
+		mu:  &sync.Mutex{},
+		ecs: ecs,
 	}
 	app.cfg = cfg
 
@@ -58,17 +62,13 @@ func NewWebApi(cfg *Config, m *Mirage) *WebApi {
 	e.Renderer = &Template{
 		templates: template.Must(template.ParseGlob(cfg.HtmlDir + "/*")),
 	}
-	app.echo = e
+	app.Echo = e
 
 	return app
 }
 
-func (api *WebApi) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	api.echo.ServeHTTP(w, req)
-}
-
 func (api *WebApi) List(c echo.Context) error {
-	info, err := api.mirage.ECS.List(statusRunning)
+	info, err := api.ecs.List(statusRunning)
 	value := map[string]interface{}{
 		"info":  info,
 		"error": err,
@@ -106,7 +106,7 @@ func (api *WebApi) Terminate(c echo.Context) error {
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {
-	info, err := api.mirage.ECS.List(statusRunning)
+	info, err := api.ecs.List(statusRunning)
 	if err != nil {
 		return c.JSON(500, APIListResponse{})
 	}
@@ -145,7 +145,7 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	if subdomain == "" || len(taskdefs) == 0 {
 		return http.StatusBadRequest, fmt.Errorf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := api.mirage.ECS.Launch(subdomain, parameter, taskdefs...)
+		err := api.ecs.Launch(subdomain, parameter, taskdefs...)
 		if err != nil {
 			log.Println("[error] launch failed: ", err)
 			return http.StatusInternalServerError, err
@@ -215,7 +215,7 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 		}
 	}
 
-	logs, err := api.mirage.ECS.Logs(subdomain, sinceTime, tailN)
+	logs, err := api.ecs.Logs(subdomain, sinceTime, tailN)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -226,11 +226,11 @@ func (api *WebApi) terminate(c echo.Context) (int, error) {
 	id := c.FormValue("id")
 	subdomain := c.FormValue("subdomain")
 	if id != "" {
-		if err := api.mirage.ECS.Terminate(id); err != nil {
+		if err := api.ecs.Terminate(id); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else if subdomain != "" {
-		if err := api.mirage.ECS.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.ecs.TerminateBySubdomain(subdomain); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else {
@@ -247,7 +247,7 @@ func (api *WebApi) accessCounter(c echo.Context) (int, int64, int64, error) {
 		durationInt = 86400 // 24 hours
 	}
 	d := time.Duration(durationInt) * time.Second
-	sum, err := api.mirage.GetAccessCount(subdomain, d)
+	sum, err := api.ecs.GetAccessCount(subdomain, d)
 	if err != nil {
 		log.Println("[error] access counter failed: ", err)
 		return http.StatusInternalServerError, 0, durationInt, err
@@ -342,7 +342,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
-	infos, err := api.mirage.ECS.List(statusRunning)
+	infos, err := api.ecs.List(statusRunning)
 	if err != nil {
 		log.Println("[error] list ecs failed: ", err)
 		return http.StatusInternalServerError, err
@@ -375,8 +375,8 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 }
 
 func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) {
-	if api.mirage.TryLock() {
-		defer api.mirage.Unlock()
+	if api.mu.TryLock() {
+		defer api.mu.Unlock()
 	} else {
 		log.Println("[info] skip purge subdomains, another purge is running")
 		return
@@ -384,7 +384,7 @@ func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) 
 	log.Printf("[info] start purge subdomains %d", len(subdomains))
 	purged := 0
 	for _, subdomain := range subdomains {
-		sum, err := api.mirage.GetAccessCount(subdomain, duration)
+		sum, err := api.ecs.GetAccessCount(subdomain, duration)
 		if err != nil {
 			log.Printf("[warn] access count failed: %s %s", subdomain, err)
 			continue
@@ -393,7 +393,7 @@ func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) 
 			log.Printf("[info] skip purge %s %d access", subdomain, sum)
 			continue
 		}
-		if err := api.mirage.ECS.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.ecs.TerminateBySubdomain(subdomain); err != nil {
 			log.Printf("[warn] terminate failed %s %s", subdomain, err)
 		} else {
 			purged++

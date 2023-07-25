@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/pkg/errors"
@@ -104,101 +106,38 @@ const (
 )
 
 type ECSInterface interface {
-	Run()
 	Launch(subdomain string, param TaskParameter, taskdefs ...string) error
 	Logs(subdomain string, since time.Time, tail int) ([]string, error)
 	Terminate(subdomain string) error
 	TerminateBySubdomain(subdomain string) error
 	List(status string) ([]Information, error)
+	SetProxyControlChannel(ch chan *proxyControl)
+	GetAccessCount(subdomain string, duration time.Duration) (int64, error)
+	PutAccessCounts(map[string]accessCount) error
 }
 
 type ECS struct {
 	cfg            *Config
 	ECS            *ecs.ECS
 	CloudWatchLogs *cloudwatchlogs.CloudWatchLogs
+	CloudWatch     *cloudwatch.CloudWatch
 
-	proxyCh chan *proxyControl
 	mirage  *Mirage
+	proxyCh chan *proxyControl
 }
 
-func NewECS(cfg *Config, m *Mirage) ECSInterface {
-	if cfg.localMode {
-		log.Println("[info] running in local mode with mock ECS.")
-		return NewECSLocal(cfg, m)
-	}
-
-	ecs := &ECS{
+func NewECS(cfg *Config) ECSInterface {
+	e := &ECS{
 		cfg:            cfg,
 		ECS:            ecs.New(cfg.session),
 		CloudWatchLogs: cloudwatchlogs.New(cfg.session),
-		proxyCh:        make(chan *proxyControl, 10),
-		mirage:         m,
+		CloudWatch:     cloudwatch.New(cfg.session),
 	}
-	return ecs
+	return e
 }
 
-func (d *ECS) Run() {
-	go d.syncToMirage()
-}
-
-func (d *ECS) syncToMirage() {
-	log.Println("[debug] starting up ECS.syncToMirage()")
-	rp := d.mirage.ReverseProxy
-	r53 := d.mirage.Route53
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-
-SYNC:
-	for {
-		select {
-		case msg := <-d.proxyCh:
-			log.Printf("[debug] proxyControl %#v", msg)
-			rp.Modify(msg)
-			continue SYNC
-		case <-ticker.C:
-		}
-
-		running, err := d.List(statusRunning)
-		if err != nil {
-			log.Println("[warn]", err)
-			continue
-		}
-		sort.SliceStable(running, func(i, j int) bool {
-			return running[i].Created.Before(running[j].Created)
-		})
-		available := make(map[string]bool)
-		for _, info := range running {
-			log.Println("[debug] ruuning task", *info.task.TaskArn)
-			if info.IPAddress != "" {
-				available[info.SubDomain] = true
-				for name, port := range info.PortMap {
-					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
-					r53.Add(name+"."+info.SubDomain, info.IPAddress)
-				}
-			}
-		}
-
-		stopped, err := d.List(statusStopped)
-		if err != nil {
-			log.Println("[warn]", err)
-			continue
-		}
-		for _, info := range stopped {
-			log.Println("[debug] stopped task", *info.task.TaskArn)
-			for name := range info.PortMap {
-				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
-			}
-		}
-
-		for _, subdomain := range rp.Subdomains() {
-			if !available[subdomain] {
-				rp.RemoveSubdomain(subdomain)
-			}
-		}
-		if err := r53.Apply(); err != nil {
-			log.Println("[warn]", err)
-		}
-	}
+func (d *ECS) SetProxyControlChannel(ch chan *proxyControl) {
+	d.proxyCh = ch
 }
 
 func (d *ECS) launchTask(subdomain string, taskdef string, option TaskParameter) error {
@@ -579,4 +518,71 @@ func (d *ECS) portMapInTask(task *ecs.Task) (map[string]int, error) {
 		}
 	}
 	return portMap, nil
+}
+
+func (d *ECS) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := d.CloudWatch.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{
+		StartTime: aws.Time(time.Now().Add(-duration)),
+		EndTime:   aws.Time(time.Now()),
+		MetricDataQueries: []*cloudwatch.MetricDataQuery{
+			{
+				Id: aws.String("request_count"),
+				MetricStat: &cloudwatch.MetricStat{
+					Metric: &cloudwatch.Metric{
+						Dimensions: []*cloudwatch.Dimension{
+							{
+								Name:  aws.String(CloudWatchDimensionName),
+								Value: aws.String(subdomain),
+							},
+						},
+						MetricName: aws.String(CloudWatchMetricName),
+						Namespace:  aws.String(CloudWatchMetricNameSpace),
+					},
+					Period: aws.Int64(int64(duration.Seconds())),
+					Stat:   aws.String("Sum"),
+				},
+			},
+		},
+	})
+	if err != nil {
+		return 0, err
+	}
+	var sum int64
+	for _, v := range res.MetricDataResults {
+		for _, vv := range v.Values {
+			sum += int64(aws.Float64Value(vv))
+		}
+	}
+	return sum, nil
+}
+
+func (d *ECS) PutAccessCounts(all map[string]accessCount) error {
+	pmInput := cloudwatch.PutMetricDataInput{
+		Namespace: aws.String(CloudWatchMetricNameSpace),
+	}
+	for subdomain, counters := range all {
+		for ts, count := range counters {
+			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
+			pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
+				MetricName: aws.String(CloudWatchMetricName),
+				Timestamp:  aws.Time(ts),
+				Value:      aws.Float64(float64(count)),
+				Dimensions: []*cloudwatch.Dimension{
+					{
+						Name:  aws.String(CloudWatchDimensionName),
+						Value: aws.String(subdomain),
+					},
+				},
+			})
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if len(pmInput.MetricData) > 0 {
+		_, err := d.CloudWatch.PutMetricDataWithContext(ctx, &pmInput)
+		return err
+	}
+	return nil
 }

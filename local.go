@@ -19,21 +19,20 @@ type ECSLocal struct {
 
 	stopServers map[string]func()
 	cfg         *Config
-	mirage      *Mirage
+	proxyCh     chan *proxyControl
 }
 
-func NewECSLocal(cfg *Config, m *Mirage) *ECSLocal {
+func NewECSLocal(cfg *Config) *ECSLocal {
 	// NewECSLocal returns a new ECSLocal instance.
 	return &ECSLocal{
 		Informations: map[string]Information{},
 		stopServers:  map[string]func(){},
 		cfg:          cfg,
-		mirage:       m,
 	}
 }
 
-func (ecs *ECSLocal) Run() {
-	// Run starts the ECSLocal instance.
+func (ecs *ECSLocal) SetProxyControlChannel(ch chan *proxyControl) {
+	ecs.proxyCh = ch
 }
 
 func (ecs *ECSLocal) List(status string) ([]Information, error) {
@@ -72,7 +71,12 @@ func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...
 		tags: option.ToECSTags(subdomain, ecs.cfg.Parameter),
 	}
 	ecs.stopServers[id] = stopServer
-	ecs.mirage.ReverseProxy.AddSubdomain(subdomain, "127.0.0.1", port)
+	ecs.proxyCh <- &proxyControl{
+		Action:    proxyAdd,
+		Subdomain: subdomain,
+		IPAddress: "127.0.0.1",
+		Port:      port,
+	}
 	return nil
 }
 
@@ -97,7 +101,10 @@ func (ecs *ECSLocal) TerminateBySubdomain(subdomain string) error {
 		if stopServer != nil {
 			stopServer()
 		}
-		ecs.mirage.ReverseProxy.RemoveSubdomain(info.SubDomain)
+		ecs.proxyCh <- &proxyControl{
+			Action:    proxyRemove,
+			Subdomain: subdomain,
+		}
 		delete(ecs.Informations, subdomain)
 	}
 	return nil
@@ -121,4 +128,14 @@ func runMockServer(content string) (int, func()) {
 	u, _ := url.Parse(ts.URL)
 	port, _ := strconv.Atoi(u.Port())
 	return port, ts.Close
+}
+
+func (ecs *ECSLocal) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+	log.Println("[debug] GetAccessCount is not implemented in ECSLocal")
+	return 0, nil
+}
+
+func (ecs *ECSLocal) PutAccessCounts(_ map[string]accessCount) error {
+	log.Println("[debug] PutAccessCounts is not implemented in ECSLocal")
+	return nil
 }

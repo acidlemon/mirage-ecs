@@ -5,11 +5,15 @@ import (
 	"time"
 )
 
+// accessCount is a map for access count
+// key is a time truncated by accessCounter.unit
+type accessCount map[time.Time]int64
+
 // accessCounter is a thread-safe counter for access
 type accessCounter struct {
 	mu    *sync.Mutex
 	unit  time.Duration
-	count map[time.Time]int64
+	count accessCount
 }
 
 // newAccessCounter returns a new access counter
@@ -20,7 +24,7 @@ func newAccessCounter(unit time.Duration) *accessCounter {
 	}
 	c := &accessCounter{
 		mu:    new(sync.Mutex),
-		count: make(map[time.Time]int64, 2), // 2 is enough for most cases
+		count: make(accessCount, 2), // 2 is enough for most cases
 		unit:  unit,
 	}
 	c.fill()
@@ -36,10 +40,10 @@ func (c *accessCounter) Add() {
 }
 
 // Collect returns the access count and resets the counter
-func (c *accessCounter) Collect() map[time.Time]int64 {
+func (c *accessCounter) Collect() accessCount {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	r := make(map[time.Time]int64, len(c.count))
+	r := make(accessCount, len(c.count))
 	for k, v := range c.count {
 		r[k] = v
 		delete(c.count, k)

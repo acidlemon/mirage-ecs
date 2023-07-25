@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -60,7 +61,7 @@ func main() {
 	}
 	log.Println("[info] mirage-ecs version:", Version)
 	app := mirageecs.Setup(cfg)
-	mirageecs.Run(app)
+	app.Run(context.TODO())
 }
 
 func overrideWithEnv(f *flag.Flag) {

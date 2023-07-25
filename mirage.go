@@ -1,18 +1,16 @@
 package mirageecs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"golang.org/x/net/context"
 )
 
 //var app *Mirage
@@ -21,27 +19,34 @@ type Mirage struct {
 	Config       *Config
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
-	ECS          ECSInterface
 	Route53      *Route53
-	CloudWatch   *cloudwatch.CloudWatch
+	ECS          ECSInterface
 
-	mu sync.Mutex
+	proxyCh chan *proxyControl
 }
 
 func Setup(cfg *Config) *Mirage {
+	// launch server
+	var e ECSInterface
+	if cfg.localMode {
+		e = NewECSLocal(cfg)
+	} else {
+		e = NewECS(cfg)
+	}
+	proxyCh := make(chan *proxyControl, 10)
+	e.SetProxyControlChannel(proxyCh)
 	m := &Mirage{
 		Config:       cfg,
 		ReverseProxy: NewReverseProxy(cfg),
+		WebApi:       NewWebApi(cfg, e),
 		Route53:      NewRoute53(cfg),
-		CloudWatch:   cloudwatch.New(cfg.session),
+		ECS:          e,
+		proxyCh:      proxyCh,
 	}
-	m.WebApi = NewWebApi(cfg, m)
-	m.ECS = NewECS(cfg, m)
 	return m
 }
 
-func Run(m *Mirage) {
-	// launch server
+func (m *Mirage) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, v := range m.Config.Listen.HTTP {
 		wg.Add(1)
@@ -64,8 +69,9 @@ func Run(m *Mirage) {
 		}(v.ListenPort)
 	}
 
-	m.ECS.Run()
-	go m.RunAccessCountCollector()
+	wg.Add(2)
+	go m.syncECSToMirage(ctx, &wg)
+	go m.RunAccessCountCollector(ctx, &wg)
 	log.Println("[info] Launch succeeded!")
 
 	wg.Wait()
@@ -113,17 +119,20 @@ func isSameHost(s1 string, s2 string) bool {
 	return lower1 == lower2
 }
 
-func (m *Mirage) RunAccessCountCollector() {
+func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 	tk := time.NewTicker(m.ReverseProxy.accessCounterUnit)
-	for range tk.C {
-		all := m.ReverseProxy.CollectAccessCounters()
+	for {
+		select {
+		case <-tk.C:
+		case <-ctx.Done():
+			log.Println("[debug] RunAccessCountCollector() is done")
+			return
+		}
+		all := m.ReverseProxy.CollectAccessCounts()
 		s, _ := json.Marshal(all)
 		log.Printf("[info] access counters: %s", string(s))
-		if m.Config.localMode {
-			log.Println("[info] local mode: skip put metrics")
-		} else {
-			m.PutAllMetrics(all)
-		}
+		m.ECS.PutAccessCounts(all)
 	}
 }
 
@@ -133,82 +142,66 @@ const (
 	CloudWatchDimensionName   = "subdomain"
 )
 
-func (m *Mirage) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
-	if m.Config.localMode {
-		log.Println("[info] local mode: skip get metrics")
-		return 0, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	res, err := m.CloudWatch.GetMetricDataWithContext(ctx, &cloudwatch.GetMetricDataInput{
-		StartTime: aws.Time(time.Now().Add(-duration)),
-		EndTime:   aws.Time(time.Now()),
-		MetricDataQueries: []*cloudwatch.MetricDataQuery{
-			{
-				Id: aws.String("request_count"),
-				MetricStat: &cloudwatch.MetricStat{
-					Metric: &cloudwatch.Metric{
-						Dimensions: []*cloudwatch.Dimension{
-							{
-								Name:  aws.String(CloudWatchDimensionName),
-								Value: aws.String(subdomain),
-							},
-						},
-						MetricName: aws.String(CloudWatchMetricName),
-						Namespace:  aws.String(CloudWatchMetricNameSpace),
-					},
-					Period: aws.Int64(int64(duration.Seconds())),
-					Stat:   aws.String("Sum"),
-				},
-			},
-		},
-	})
-	if err != nil {
-		return 0, err
-	}
-	var sum int64
-	for _, v := range res.MetricDataResults {
-		for _, vv := range v.Values {
-			sum += int64(aws.Float64Value(vv))
-		}
-	}
-	return sum, nil
-}
+func (app *Mirage) syncECSToMirage(ctx context.Context, wg *sync.WaitGroup) {
+	wg.Done()
+	log.Println("[debug] starting up syncECSToMirage()")
+	rp := app.ReverseProxy
+	r53 := app.Route53
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
 
-func (m *Mirage) PutAllMetrics(all map[string]map[time.Time]int64) {
-	pmInput := cloudwatch.PutMetricDataInput{
-		Namespace: aws.String(CloudWatchMetricNameSpace),
-	}
-	for subdomain, counters := range all {
-		for ts, count := range counters {
-			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
-			pmInput.MetricData = append(pmInput.MetricData, &cloudwatch.MetricDatum{
-				MetricName: aws.String(CloudWatchMetricName),
-				Timestamp:  aws.Time(ts),
-				Value:      aws.Float64(float64(count)),
-				Dimensions: []*cloudwatch.Dimension{
-					{
-						Name:  aws.String(CloudWatchDimensionName),
-						Value: aws.String(subdomain),
-					},
-				},
-			})
+SYNC:
+	for {
+		select {
+		case msg := <-app.proxyCh:
+			log.Printf("[debug] proxyControl %#v", msg)
+			rp.Modify(msg)
+			continue SYNC
+		case <-ticker.C:
+		case <-ctx.Done():
+			log.Println("[debug] syncECSToMirage() is done")
+			return
 		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if len(pmInput.MetricData) > 0 {
-		_, err := m.CloudWatch.PutMetricDataWithContext(ctx, &pmInput)
+
+		running, err := app.ECS.List(statusRunning)
 		if err != nil {
-			log.Printf("[error] %s", err)
+			log.Println("[warn]", err)
+			continue
+		}
+		sort.SliceStable(running, func(i, j int) bool {
+			return running[i].Created.Before(running[j].Created)
+		})
+		available := make(map[string]bool)
+		for _, info := range running {
+			log.Println("[debug] ruuning task", info.ID)
+			if info.IPAddress != "" {
+				available[info.SubDomain] = true
+				for name, port := range info.PortMap {
+					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
+					r53.Add(name+"."+info.SubDomain, info.IPAddress)
+				}
+			}
+		}
+
+		stopped, err := app.ECS.List(statusStopped)
+		if err != nil {
+			log.Println("[warn]", err)
+			continue
+		}
+		for _, info := range stopped {
+			log.Println("[debug] stopped task", info.ID)
+			for name := range info.PortMap {
+				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
+			}
+		}
+
+		for _, subdomain := range rp.Subdomains() {
+			if !available[subdomain] {
+				rp.RemoveSubdomain(subdomain)
+			}
+		}
+		if err := r53.Apply(); err != nil {
+			log.Println("[warn]", err)
 		}
 	}
-}
-
-func (app *Mirage) TryLock() bool {
-	return app.mu.TryLock()
-}
-
-func (app *Mirage) Unlock() {
-	app.mu.Unlock()
 }

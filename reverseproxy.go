@@ -264,14 +264,14 @@ func (r *ReverseProxy) Modify(action *proxyControl) {
 	}
 }
 
-func (r *ReverseProxy) CollectAccessCounters() map[string]map[time.Time]int64 {
+func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	counters := make(map[string]map[time.Time]int64)
+	counts := make(map[string]accessCount)
 	for subdomain, counter := range r.accessCounters {
-		counters[subdomain] = counter.Collect()
+		counts[subdomain] = counter.Collect()
 	}
-	return counters
+	return counts
 }
 
 type countingTransport struct {
