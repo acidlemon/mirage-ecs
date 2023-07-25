@@ -117,11 +117,11 @@ type TaskRunner interface {
 }
 
 type ECS struct {
-	cfg     *Config
-	svc     *ecs.ECS
-	logsSvc *cloudwatchlogs.CloudWatchLogs
-	cwSvc   *cloudwatch.CloudWatch
-	proxyCh chan *proxyControl
+	cfg            *Config
+	svc            *ecs.ECS
+	logsSvc        *cloudwatchlogs.CloudWatchLogs
+	cwSvc          *cloudwatch.CloudWatch
+	proxyControlCh chan *proxyControl
 }
 
 func NewECSTaskRunner(cfg *Config) TaskRunner {
@@ -135,7 +135,7 @@ func NewECSTaskRunner(cfg *Config) TaskRunner {
 }
 
 func (e *ECS) SetProxyControlChannel(ch chan *proxyControl) {
-	e.proxyCh = ch
+	e.proxyControlCh = ch
 }
 
 func (e *ECS) launchTask(subdomain string, taskdef string, option TaskParameter) error {
@@ -319,7 +319,7 @@ func (e *ECS) TerminateBySubdomain(subdomain string) error {
 	}
 	var eg errgroup.Group
 	eg.Go(func() error {
-		e.proxyCh <- &proxyControl{
+		e.proxyControlCh <- &proxyControl{
 			Action:    proxyRemove,
 			Subdomain: subdomain,
 		}

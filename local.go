@@ -19,7 +19,7 @@ type LocalTaskRunner struct {
 
 	stopServerFuncs map[string]func()
 	cfg             *Config
-	proxyCh         chan *proxyControl
+	proxyControlCh  chan *proxyControl
 }
 
 func NewLocalTaskRunner(cfg *Config) TaskRunner {
@@ -31,7 +31,7 @@ func NewLocalTaskRunner(cfg *Config) TaskRunner {
 }
 
 func (e *LocalTaskRunner) SetProxyControlChannel(ch chan *proxyControl) {
-	e.proxyCh = ch
+	e.proxyControlCh = ch
 }
 
 func (e *LocalTaskRunner) List(status string) ([]Information, error) {
@@ -70,7 +70,7 @@ func (e *LocalTaskRunner) Launch(subdomain string, option TaskParameter, taskdef
 		tags: option.ToECSTags(subdomain, e.cfg.Parameter),
 	}
 	e.stopServerFuncs[id] = stopServerFunc
-	e.proxyCh <- &proxyControl{
+	e.proxyControlCh <- &proxyControl{
 		Action:    proxyAdd,
 		Subdomain: subdomain,
 		IPAddress: "127.0.0.1",
@@ -99,7 +99,7 @@ func (e *LocalTaskRunner) TerminateBySubdomain(subdomain string) error {
 		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
 			stop()
 		}
-		e.proxyCh <- &proxyControl{
+		e.proxyControlCh <- &proxyControl{
 			Action:    proxyRemove,
 			Subdomain: subdomain,
 		}

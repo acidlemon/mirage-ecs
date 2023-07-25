@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	mirageecs "github.com/acidlemon/mirage-ecs"
 	"github.com/hashicorp/logutils"
@@ -46,6 +48,9 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Printf("[debug] setting log level: %s", *logLevel)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{
 		Path:        *confFile,
 		LocalMode:   localMode,
@@ -61,7 +66,7 @@ func main() {
 	}
 	log.Println("[info] mirage-ecs version:", Version)
 	app := mirageecs.New(cfg)
-	app.Run(context.TODO())
+	app.Run(ctx)
 }
 
 func overrideWithEnv(f *flag.Flag) {
