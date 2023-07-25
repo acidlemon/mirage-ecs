@@ -20,27 +20,22 @@ type Mirage struct {
 	WebApi       *WebApi
 	ReverseProxy *ReverseProxy
 	Route53      *Route53
-	ECS          ECSInterface
 
+	runner  TaskRunner
 	proxyCh chan *proxyControl
 }
 
 func Setup(cfg *Config) *Mirage {
 	// launch server
-	var e ECSInterface
-	if cfg.localMode {
-		e = NewECSLocal(cfg)
-	} else {
-		e = NewECS(cfg)
-	}
+	runner := cfg.NewTaskRunner()
 	proxyCh := make(chan *proxyControl, 10)
-	e.SetProxyControlChannel(proxyCh)
+	runner.SetProxyControlChannel(proxyCh)
 	m := &Mirage{
 		Config:       cfg,
 		ReverseProxy: NewReverseProxy(cfg),
-		WebApi:       NewWebApi(cfg, e),
+		WebApi:       NewWebApi(cfg, runner),
 		Route53:      NewRoute53(cfg),
-		ECS:          e,
+		runner:       runner,
 		proxyCh:      proxyCh,
 	}
 	return m
@@ -132,7 +127,7 @@ func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup
 		all := m.ReverseProxy.CollectAccessCounts()
 		s, _ := json.Marshal(all)
 		log.Printf("[info] access counters: %s", string(s))
-		m.ECS.PutAccessCounts(all)
+		m.runner.PutAccessCounts(all)
 	}
 }
 
@@ -163,7 +158,7 @@ SYNC:
 			return
 		}
 
-		running, err := app.ECS.List(statusRunning)
+		running, err := app.runner.List(statusRunning)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue
@@ -183,7 +178,7 @@ SYNC:
 			}
 		}
 
-		stopped, err := app.ECS.List(statusStopped)
+		stopped, err := app.runner.List(statusStopped)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue

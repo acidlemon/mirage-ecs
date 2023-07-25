@@ -266,6 +266,14 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 	return cfg, nil
 }
 
+func (c *Config) NewTaskRunner() TaskRunner {
+	if c.localMode {
+		return NewLocalTaskRunner(c)
+	} else {
+		return NewECSTaskRunner(c)
+	}
+}
+
 func (c *Config) fillECSDefaults(ctx context.Context) error {
 	defer func() {
 		if err := c.ECS.validate(); err != nil {
