@@ -20,7 +20,7 @@ func TestE2EAPI(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	m := mirageecs.Setup(cfg)
+	m := mirageecs.New(cfg)
 	ts := httptest.NewServer(m.WebApi)
 	defer ts.Close()
 	client := ts.Client()

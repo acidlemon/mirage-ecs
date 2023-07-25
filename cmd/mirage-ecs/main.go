@@ -60,7 +60,7 @@ func main() {
 		return
 	}
 	log.Println("[info] mirage-ecs version:", Version)
-	app := mirageecs.Setup(cfg)
+	app := mirageecs.New(cfg)
 	app.Run(context.TODO())
 }
 

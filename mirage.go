@@ -25,7 +25,7 @@ type Mirage struct {
 	proxyCh chan *proxyControl
 }
 
-func Setup(cfg *Config) *Mirage {
+func New(cfg *Config) *Mirage {
 	// launch server
 	runner := cfg.NewTaskRunner()
 	proxyCh := make(chan *proxyControl, 10)
