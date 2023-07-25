@@ -80,21 +80,21 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 	return nil
 }
 
-func (e *LocalTaskRunner) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
+func (e *LocalTaskRunner) Logs(_ context.Context, subdomain string, since time.Time, tail int) ([]string, error) {
 	// Logs returns logs of the specified subdomain.
 	return []string{"Sorry. mock server logs are empty."}, nil
 }
 
-func (e *LocalTaskRunner) Terminate(id string) error {
+func (e *LocalTaskRunner) Terminate(ctx context.Context, id string) error {
 	for _, info := range e.Informations {
 		if info.ID == id {
-			return e.TerminateBySubdomain(info.SubDomain)
+			return e.TerminateBySubdomain(ctx, info.SubDomain)
 		}
 	}
 	return nil
 }
 
-func (e *LocalTaskRunner) TerminateBySubdomain(subdomain string) error {
+func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
 	log.Printf("[info] Terminating a mock task: subdomain=%s", subdomain)
 	if info, ok := e.Informations[subdomain]; ok {
 		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {

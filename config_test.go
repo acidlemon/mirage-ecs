@@ -70,8 +70,8 @@ link:
 	if err := ioutil.WriteFile(f.Name(), []byte(data), 0644); err != nil {
 		t.Error(err)
 	}
-
-	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: f.Name()})
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}

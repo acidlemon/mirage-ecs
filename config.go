@@ -226,7 +226,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		var content []byte
 		var err error
 		if strings.HasPrefix(p.Path, "s3://") {
-			content, err = loadFromS3(context.TODO(), cfg.awscfg, p.Path)
+			content, err = loadFromS3(ctx, cfg.awscfg, p.Path)
 		} else {
 			content, err = loadFromFile(p.Path)
 		}
@@ -263,7 +263,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
-	if err := cfg.fillECSDefaults(context.TODO()); err != nil {
+	if err := cfg.fillECSDefaults(ctx); err != nil {
 		log.Printf("[warn] failed to fill ECS defaults: %s", err)
 	}
 	return cfg, nil

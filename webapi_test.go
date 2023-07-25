@@ -16,8 +16,10 @@ import (
 )
 
 func TestLoadParameter(t *testing.T) {
+	ctx := context.Background()
+
 	testFile := "config_sample.yml"
-	cfg, _ := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: testFile})
+	cfg, _ := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: testFile})
 	app := mirageecs.NewWebApi(cfg, &mirageecs.LocalTaskRunner{})
 
 	params := url.Values{}
@@ -78,7 +80,7 @@ parameters:
 		t.Error(err)
 	}
 
-	cfg, err = mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{Path: f.Name()})
+	cfg, err = mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}

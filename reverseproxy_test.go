@@ -10,7 +10,8 @@ import (
 )
 
 func TestReverseProxy(t *testing.T) {
-	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		Domain: "example.net",
 	})
 	if err != nil {

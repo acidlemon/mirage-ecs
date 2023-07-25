@@ -25,6 +25,8 @@ var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\
 
 const PurgeMinimumDuration = 5 * time.Minute
 
+const APICallTimeout = 30 * time.Second
+
 type WebApi struct {
 	*echo.Echo
 
@@ -146,7 +148,9 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	if subdomain == "" || len(taskdefs) == 0 {
 		return http.StatusBadRequest, fmt.Errorf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := api.runner.Launch(context.TODO(), subdomain, parameter, taskdefs...)
+		ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+		defer cancel()
+		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
 		if err != nil {
 			log.Println("[error] launch failed: ", err)
 			return http.StatusInternalServerError, err
@@ -216,7 +220,9 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 		}
 	}
 
-	logs, err := api.runner.Logs(subdomain, sinceTime, tailN)
+	ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+	defer cancel()
+	logs, err := api.runner.Logs(ctx, subdomain, sinceTime, tailN)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -226,12 +232,14 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 func (api *WebApi) terminate(c echo.Context) (int, error) {
 	id := c.FormValue("id")
 	subdomain := c.FormValue("subdomain")
+	ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+	defer cancel()
 	if id != "" {
-		if err := api.runner.Terminate(id); err != nil {
+		if err := api.runner.Terminate(ctx, id); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else if subdomain != "" {
-		if err := api.runner.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.runner.TerminateBySubdomain(ctx, subdomain); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else {
@@ -369,6 +377,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {
+		// running in background. Don't cancel by client context.
 		go api.purgeSubdomains(context.Background(), terminates, duration)
 	}
 
@@ -394,7 +403,7 @@ func (api *WebApi) purgeSubdomains(ctx context.Context, subdomains []string, dur
 			log.Printf("[info] skip purge %s %d access", subdomain, sum)
 			continue
 		}
-		if err := api.runner.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.runner.TerminateBySubdomain(ctx, subdomain); err != nil {
 			log.Printf("[warn] terminate failed %s %s", subdomain, err)
 		} else {
 			purged++

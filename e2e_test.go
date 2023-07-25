@@ -14,14 +14,15 @@ import (
 )
 
 func TestE2EAPI(t *testing.T) {
-	cfg, err := mirageecs.NewConfig(context.TODO(), &mirageecs.ConfigParams{
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		LocalMode: true,
 		Domain:    "localtest.me",
 	})
 	if err != nil {
 		t.Error(err)
 	}
-	m := mirageecs.New(cfg)
+	m := mirageecs.New(context.Background(), cfg)
 	ts := httptest.NewServer(m.WebApi)
 	defer ts.Close()
 	client := ts.Client()

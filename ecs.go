@@ -111,9 +111,9 @@ const (
 
 type TaskRunner interface {
 	Launch(ctx context.Context, subdomain string, param TaskParameter, taskdefs ...string) error
-	Logs(subdomain string, since time.Time, tail int) ([]string, error)
-	Terminate(subdomain string) error
-	TerminateBySubdomain(subdomain string) error
+	Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error)
+	Terminate(ctx context.Context, subdomain string) error
+	TerminateBySubdomain(ctx context.Context, subdomain string) error
 	List(ctx context.Context, status string) ([]Information, error)
 	SetProxyControlChannel(ch chan *proxyControl)
 	GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error)
@@ -197,11 +197,11 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 }
 
 func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
-	if infos, err := e.find(subdomain); err != nil {
+	if infos, err := e.find(ctx, subdomain); err != nil {
 		return errors.Wrapf(err, "failed to get subdomain %s", subdomain)
 	} else if len(infos) > 0 {
 		log.Printf("[info] subdomain %s is already running %d tasks. Terminating...", subdomain, len(infos))
-		err := e.TerminateBySubdomain(subdomain)
+		err := e.TerminateBySubdomain(ctx, subdomain)
 		if err != nil {
 			return err
 		}
@@ -219,8 +219,8 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 	return eg.Wait()
 }
 
-func (e *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
-	infos, err := e.find(subdomain)
+func (e *ECS) Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error) {
+	infos, err := e.find(ctx, subdomain)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func (e *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 	for _, info := range infos {
 		info := info
 		eg.Go(func() error {
-			l, err := e.logs(info, since, tail)
+			l, err := e.logs(ctx, info, since, tail)
 			mu.Lock()
 			defer mu.Unlock()
 			logs = append(logs, l...)
@@ -244,9 +244,9 @@ func (e *ECS) Logs(subdomain string, since time.Time, tail int) ([]string, error
 	return logs, eg.Wait()
 }
 
-func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error) {
+func (e *ECS) logs(ctx context.Context, info Information, since time.Time, tail int) ([]string, error) {
 	task := info.task
-	taskdefOut, err := e.svc.DescribeTaskDefinition(context.TODO(), &ecs.DescribeTaskDefinitionInput{
+	taskdefOut, err := e.svc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: task.TaskDefinitionArn,
 		Include:        []types.TaskDefinitionField{types.TaskDefinitionFieldTags},
 	})
@@ -288,7 +288,7 @@ func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error
 			if !since.IsZero() {
 				in.StartTime = aws.Int64(since.Unix() * 1000)
 			}
-			eventsOut, err := e.logsSvc.GetLogEvents(context.TODO(), in)
+			eventsOut, err := e.logsSvc.GetLogEvents(ctx, in)
 			if err != nil {
 				log.Printf("[warn] failed to get log events from group %s stream %s: %s", group, stream, err)
 				continue
@@ -305,9 +305,9 @@ func (e *ECS) logs(info Information, since time.Time, tail int) ([]string, error
 	return logs, nil
 }
 
-func (e *ECS) Terminate(taskArn string) error {
+func (e *ECS) Terminate(ctx context.Context, taskArn string) error {
 	log.Printf("[info] stop task %s", taskArn)
-	_, err := e.svc.StopTask(context.TODO(), &ecs.StopTaskInput{
+	_, err := e.svc.StopTask(ctx, &ecs.StopTaskInput{
 		Cluster: aws.String(e.cfg.ECS.Cluster),
 		Task:    aws.String(taskArn),
 		Reason:  aws.String("Terminate requested by Mirage"),
@@ -315,8 +315,8 @@ func (e *ECS) Terminate(taskArn string) error {
 	return err
 }
 
-func (e *ECS) TerminateBySubdomain(subdomain string) error {
-	infos, err := e.find(subdomain)
+func (e *ECS) TerminateBySubdomain(ctx context.Context, subdomain string) error {
+	infos, err := e.find(ctx, subdomain)
 	if err != nil {
 		return err
 	}
@@ -331,16 +331,16 @@ func (e *ECS) TerminateBySubdomain(subdomain string) error {
 	for _, info := range infos {
 		info := info
 		eg.Go(func() error {
-			return e.Terminate(info.ID)
+			return e.Terminate(ctx, info.ID)
 		})
 	}
 	return eg.Wait()
 }
 
-func (e *ECS) find(subdomain string) ([]Information, error) {
+func (e *ECS) find(ctx context.Context, subdomain string) ([]Information, error) {
 	var results []Information
 
-	infos, err := e.List(context.TODO(), statusRunning)
+	infos, err := e.List(ctx, statusRunning)
 	if err != nil {
 		return results, err
 	}
@@ -398,7 +398,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 				tags:       task.Tags,
 				task:       &task,
 			}
-			if portMap, err := e.portMapInTask(&task); err != nil {
+			if portMap, err := e.portMapInTask(ctx, &task); err != nil {
 				log.Printf("[warn] failed to get portMap in task %s %s", *task.TaskArn, err)
 			} else {
 				info.PortMap = portMap
@@ -493,13 +493,13 @@ func decodeTagValue(s string) string {
 	return string(d)
 }
 
-func (e *ECS) portMapInTask(task *types.Task) (map[string]int, error) {
+func (e *ECS) portMapInTask(ctx context.Context, task *types.Task) (map[string]int, error) {
 	portMap := make(map[string]int)
 	tdArn := *task.TaskDefinitionArn
 	td, err := taskDefinitionCache.Get(tdArn)
 	if err != nil && err == ttlcache.ErrNotFound {
 		log.Println("[debug] cache miss for", tdArn)
-		out, err := e.svc.DescribeTaskDefinition(context.TODO(), &ecs.DescribeTaskDefinitionInput{
+		out, err := e.svc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: &tdArn,
 		})
 		if err != nil {

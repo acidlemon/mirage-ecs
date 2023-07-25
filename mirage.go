@@ -23,7 +23,7 @@ type Mirage struct {
 	proxyControlCh chan *proxyControl
 }
 
-func New(cfg *Config) *Mirage {
+func New(ctx context.Context, cfg *Config) *Mirage {
 	// launch server
 	runner := cfg.NewTaskRunner()
 	ch := make(chan *proxyControl, 10)
@@ -32,7 +32,7 @@ func New(cfg *Config) *Mirage {
 		Config:         cfg,
 		ReverseProxy:   NewReverseProxy(cfg),
 		WebApi:         NewWebApi(cfg, runner),
-		Route53:        NewRoute53(cfg),
+		Route53:        NewRoute53(ctx, cfg),
 		runner:         runner,
 		proxyControlCh: ch,
 	}
@@ -197,7 +197,7 @@ SYNC:
 				rp.RemoveSubdomain(subdomain)
 			}
 		}
-		if err := r53.Apply(); err != nil {
+		if err := r53.Apply(ctx); err != nil {
 			log.Println("[warn]", err)
 		}
 	}

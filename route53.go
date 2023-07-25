@@ -38,13 +38,13 @@ func (c *route53Change) action() string {
 	}
 }
 
-func NewRoute53(cfg *Config) *Route53 {
+func NewRoute53(ctx context.Context, cfg *Config) *Route53 {
 	svc := route53.NewFromConfig(*cfg.awscfg)
 	r := &Route53{
 		svc: svc,
 	}
 	if id := cfg.Link.HostedZoneID; id != "" {
-		out, err := svc.GetHostedZone(context.TODO(), &route53.GetHostedZoneInput{
+		out, err := svc.GetHostedZone(ctx, &route53.GetHostedZoneInput{
 			Id: aws.String(id),
 		})
 		if err != nil {
@@ -100,7 +100,7 @@ func (r *Route53) Delete(name string, addr string) {
 	r.changes = append(r.changes, change)
 }
 
-func (r *Route53) Apply() error {
+func (r *Route53) Apply(ctx context.Context) error {
 	if r.hostedZoneID == nil || len(r.changes) == 0 {
 		return nil
 	}
@@ -160,7 +160,7 @@ DELETES:
 		log.Printf("[info] route53 change: %v", change)
 	}
 
-	_, err := r.svc.ChangeResourceRecordSets(context.TODO(), &route53.ChangeResourceRecordSetsInput{
+	_, err := r.svc.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &types.ChangeBatch{
 			Changes: changes,
 		},
