@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	mirageecs "github.com/acidlemon/mirage-ecs"
 	"github.com/hashicorp/logutils"
 	"gopkg.in/yaml.v2"
 )
@@ -44,7 +46,7 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Printf("[debug] setting log level: %s", *logLevel)
 
-	cfg, err := NewConfig(&ConfigParams{
+	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{
 		Path:        *confFile,
 		LocalMode:   localMode,
 		Domain:      *domain,
@@ -57,8 +59,9 @@ func main() {
 		yaml.NewEncoder(os.Stdout).Encode(cfg)
 		return
 	}
-	Setup(cfg)
-	Run()
+	log.Println("[info] mirage-ecs version:", Version)
+	app := mirageecs.New(cfg)
+	app.Run(context.TODO())
 }
 
 func overrideWithEnv(f *flag.Flag) {

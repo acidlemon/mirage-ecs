@@ -1,4 +1,4 @@
-package main
+package mirageecs
 
 import (
 	"context"
@@ -264,6 +264,14 @@ func NewConfig(p *ConfigParams) (*Config, error) {
 		log.Printf("[warn] failed to fill ECS defaults: %s", err)
 	}
 	return cfg, nil
+}
+
+func (c *Config) NewTaskRunner() TaskRunner {
+	if c.localMode {
+		return NewLocalTaskRunner(c)
+	} else {
+		return NewECSTaskRunner(c)
+	}
 }
 
 func (c *Config) fillECSDefaults(ctx context.Context) error {

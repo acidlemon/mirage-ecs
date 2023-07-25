@@ -1,9 +1,11 @@
-package main
+package mirageecs_test
 
 import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -68,7 +70,7 @@ link:
 		t.Error(err)
 	}
 
-	cfg, err := NewConfig(&ConfigParams{Path: f.Name()})
+	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}
