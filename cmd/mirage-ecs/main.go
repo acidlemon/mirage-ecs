@@ -64,7 +64,8 @@ func main() {
 		yaml.NewEncoder(os.Stdout).Encode(cfg)
 		return
 	}
-	log.Println("[info] mirage-ecs version:", Version)
+	mirageecs.Version = Version
+	log.Println("[info] mirage-ecs version:", mirageecs.Version)
 	app := mirageecs.New(ctx, cfg)
 	app.Run(ctx)
 }
