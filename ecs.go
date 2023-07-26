@@ -258,6 +258,9 @@ func (e *ECS) logs(ctx context.Context, info Information, since time.Time, tail 
 	for _, c := range taskdefOut.TaskDefinition.ContainerDefinitions {
 		c := c
 		logConf := c.LogConfiguration
+		if logConf == nil {
+			continue
+		}
 		if logConf.LogDriver != types.LogDriverAwslogs {
 			log.Printf("[warn] LogDriver %s is not supported", logConf.LogDriver)
 			continue
