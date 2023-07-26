@@ -130,6 +130,7 @@ type ECS struct {
 func NewECSTaskRunner(cfg *Config) TaskRunner {
 	e := &ECS{
 		cfg:     cfg,
+		svc:     ecs.NewFromConfig(*cfg.awscfg),
 		logsSvc: cwlogs.NewFromConfig(*cfg.awscfg),
 		cwSvc:   cw.NewFromConfig(*cfg.awscfg),
 	}

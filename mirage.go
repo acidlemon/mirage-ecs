@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var Version = "current"
+
 type Mirage struct {
 	Config       *Config
 	WebApi       *WebApi
