@@ -40,7 +40,12 @@ type Template struct {
 }
 
 func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
+	if m, ok := data.(map[string]interface{}); ok {
+		m["Version"] = Version
+		return t.templates.ExecuteTemplate(w, name, m)
+	} else {
+		return t.templates.ExecuteTemplate(w, name, data)
+	}
 }
 
 func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
