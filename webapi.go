@@ -383,6 +383,7 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 			"result": err.Error(),
 		}
 	}
+	log.Printf("[info] purge subdomains: duration=%s, excludes=%v, exclude_tags=%v", duration, excludes, excludeTags)
 	tm := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
 		if info.ShouldBePurged(duration, excludesMap, excludeTagsMap) {
