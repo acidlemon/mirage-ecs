@@ -322,48 +322,53 @@ link:
 
 ## API Documents
 
+mirage-ecs provides the following APIs.
+
+POST APIs are accepts parameters from a request body as `application/x-www-form-urlencoded` or `application/json`.
+GET APIs are only accepts URL query parameters.
+
 ### `GET /api/list`
 
 `/api/list` returns list of running tasks.
 
 ```json
 {
-    "result": [
-        {
-            "id": "arn:aws:ecs:ap-northeast-1:12345789012:task/dev/af8e7a6dad6e44d4862696002f41c2dc",
-            "short_id": "af8e7a6dad6e44d4862696002f41c2dc",
-            "subdomain": "b15",
-            "branch": "topic/b15",
-            "taskdef": "dev:756",
-            "ipaddress": "10.206.242.48",
-            "created": "0001-01-01T00:00:00Z",
-            "last_status": "PENDING",
-            "port_map": {
-                "nginx": 80
-            },
-            "env": {
-                "GIT_BRANCH": "topic/b15",
-                "SUBDOMAIN": "YjE1",
-            }
-        },
-        {
-            "id": "arn:aws:ecs:ap-northeast-1:123456789012:task/dev/d007a00bf9a0411ebbcf95291aced40f",
-            "short_id": "d007a00bf9a0411ebbcf95291aced40f",
-            "subdomain": "bench",
-            "branch": "feature/bench",
-            "taskdef": "dev:641",
-            "ipaddress": "10.206.240.60",
-            "created": "2023-03-13T00:29:08.959Z",
-            "last_status": "RUNNING",
-            "port_map": {
-                "nginx": 80
-            },
-            "env": {
-                "GIT_BRANCH": "feature/bench",
-                "SUBDOMAIN": "YmVuY2g=",
-            }
-        }
-    ]
+  "result": [
+    {
+      "id": "arn:aws:ecs:ap-northeast-1:12345789012:task/dev/af8e7a6dad6e44d4862696002f41c2dc",
+      "short_id": "af8e7a6dad6e44d4862696002f41c2dc",
+      "subdomain": "b15",
+      "branch": "topic/b15",
+      "taskdef": "dev:756",
+      "ipaddress": "10.206.242.48",
+      "created": "0001-01-01T00:00:00Z",
+      "last_status": "PENDING",
+      "port_map": {
+        "nginx": 80
+      },
+      "env": {
+        "GIT_BRANCH": "topic/b15",
+        "SUBDOMAIN": "YjE1"
+      }
+    },
+    {
+      "id": "arn:aws:ecs:ap-northeast-1:123456789012:task/dev/d007a00bf9a0411ebbcf95291aced40f",
+      "short_id": "d007a00bf9a0411ebbcf95291aced40f",
+      "subdomain": "bench",
+      "branch": "feature/bench",
+      "taskdef": "dev:641",
+      "ipaddress": "10.206.240.60",
+      "created": "2023-03-13T00:29:08.959Z",
+      "last_status": "RUNNING",
+      "port_map": {
+        "nginx": 80
+      },
+      "env": {
+        "GIT_BRANCH": "feature/bench",
+        "SUBDOMAIN": "YmVuY2g="
+      }
+    }
+  ]
 }
 ```
 
@@ -371,15 +376,35 @@ link:
 
 `/api/launch` launches a new task.
 
-Parameters:
+#### Form parameters
+
+Content-Type must be `application/x-www-form-urlencoded`.
+
 - `subdomain`: subdomain of the task. (required)
 - `taskdef`: ECS task definition name (maybe includes revision) for the task. (required)
 - extra parameters: Additional parameters for the task. (optional, defined in config file `parameters` section)
   - `branch`: branch is appended to extra parameters automatically.
 
+#### JSON parameters
+
+You can also specify parameters as JSON. Content-Type must be `application/json`.
+
 ```json
 {
-  "result": "accepted",
+  "subdomain": "bench",
+  "taskdef": ["dev:641"],
+  "branch": "feature/bench",
+  "parameters": {
+    "launched_by": "foo"
+  }
+}
+```
+
+#### Response
+
+```json
+{
+  "result": "accepted"
 }
 ```
 
@@ -413,7 +438,7 @@ mirage-ecs tags the task with following keys and values.
 
 `/api/logs` returns logs of the task.
 
-Parameters:
+Query parameters:
 - `subdomain`: subdomain of the task.
 - `since`: RFC3339 timestamp of the first log to return.
 - `tail`: number of lines to return or `all`.
@@ -431,15 +456,35 @@ Parameters:
 
 `/api/terminate` terminates the task.
 
-Parameters:
+#### Form parameters
+
 - `subdomain`: subdomain of the task.
 - `id`: task ID of the task.
 
-`subdomain` and `id` are exclusive. If both are specified, `id` is used.
+- `subdomain` and `id` are exclusive. If both are specified, `id` is used.
+- `id` is a short ID of the task(e.g. `af8e7a6dad6e44d4862696002f41c2dc`) or Arn of the ECS task.(e.g. `arn:aws:ecs:ap-northeast-1:123456789012:task/dev/af8e7a6dad6e44d4862696002f41c2dc`)
+
+#### JSON parameters
 
 ```json
 {
-  "status": "ok"
+  "subdomain": "bench"
+}
+```
+
+or
+
+```json
+{
+  "id": "d007a00bf9a0411ebbcf95291aced40f"
+}
+```
+
+#### Response
+
+```json
+{
+  "result": "ok"
 }
 ```
 
@@ -447,7 +492,7 @@ Parameters:
 
 `/api/access` returns access counter of the task.
 
-Parameters:
+Query parameters:
 - `subdomain`: subdomain of the task.
 - `duration`: duration(seconds) of the counter. default is 86400.
 
@@ -463,12 +508,24 @@ Parameters:
 
 `/api/purge` terminates tasks that not be accessed in the specified duration.
 
-Parameters:
+#### Form parameters
+
 - `excludes`: subdomains of tasks to exclude termination. multiple values are allowed.
 - `exclude_tags`: tags of tasks to exclude termination. multiple values are allowed.
   - format is `Key:Value`
   - See also /api/lanch.
 - `duration`: duration(seconds) of the counter. required. minimum is 300 (5 min).
+
+
+#### JSON parameters
+
+```json
+{
+  "excludes": ["foo", "bar"],
+  "exclude_tags": ["branch:preview"],
+  "duration": 86400
+}
+```
 
 mirage-ecs counts access of all tasks the same as `/api/access` API internally. If the access count of a task is 0 and the task has an uptime over the specified duration, terminate these tasks.
 
@@ -478,9 +535,12 @@ For example, if you specify `duration=86400`, mirage-ecs terminates tasks that m
 
 This API works ansynchronously. The response is returned immediately. mirage-ecs terminates tasks in the background.
 
+
+#### Response
+
 ```json
 {
-  "status": "ok"
+  "result": "accepted"
 }
 ```
 
