@@ -67,7 +67,10 @@ func main() {
 	mirageecs.Version = Version
 	log.Println("[info] mirage-ecs version:", mirageecs.Version)
 	app := mirageecs.New(ctx, cfg)
-	app.Run(ctx)
+	if err := app.Run(ctx); err != nil {
+		log.Println("[error]", err)
+		os.Exit(1)
+	}
 }
 
 func overrideWithEnv(f *flag.Flag) {

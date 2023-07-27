@@ -41,8 +41,11 @@ func New(ctx context.Context, cfg *Config) *Mirage {
 	return m
 }
 
-func (m *Mirage) Run(ctx context.Context) {
+func (m *Mirage) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errors := make(chan error, 10)
 	for _, v := range m.Config.Listen.HTTP {
 		wg.Add(1)
 		go func(port int) {
@@ -51,6 +54,8 @@ func (m *Mirage) Run(ctx context.Context) {
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
 				log.Printf("[error] cannot listen %s: %s", laddr, err)
+				errors <- err
+				cancel()
 				return
 			}
 
@@ -74,6 +79,12 @@ func (m *Mirage) Run(ctx context.Context) {
 	go m.RunAccessCountCollector(ctx, &wg)
 	wg.Wait()
 	log.Println("[info] shutdown mirage-ecs")
+	select {
+	case err := <-errors:
+		return err
+	default:
+	}
+	return nil
 }
 
 func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, port int) {

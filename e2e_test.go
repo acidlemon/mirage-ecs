@@ -13,12 +13,48 @@ import (
 	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
+var e2eRequestsForm = map[string]string{
+	"/api/launch": url.Values{
+		"subdomain": []string{"mytask"},
+		"taskdef":   []string{"dummy"},
+		"branch":    []string{"develop"},
+		"env":       []string{"test"},
+	}.Encode(),
+	"/api/purge": url.Values{
+		"duration": []string{"300"},
+	}.Encode(),
+	"/api/terminate": url.Values{
+		"subdomain": []string{"mytask"},
+	}.Encode(),
+}
+
+var e2eRequestsJSON = map[string]string{
+	"/api/launch":    `{"subdomain":"mytask","taskdef":["dummy"],"branch":"develop","parameters":{"env":"test"}}`,
+	"/api/purge":     `{"duration":300}`,
+	"/api/terminate": `{"subdomain":"mytask"}`,
+}
+
 func TestE2EAPI(t *testing.T) {
+	t.Run("form", func(t *testing.T) {
+		testE2EAPI(t, e2eRequestsForm, "application/x-www-form-urlencoded")
+	})
+	t.Run("json", func(t *testing.T) {
+		testE2EAPI(t, e2eRequestsJSON, "application/json")
+	})
+}
+
+func testE2EAPI(t *testing.T, reqs map[string]string, contentType string) {
 	ctx := context.Background()
 	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		LocalMode: true,
 		Domain:    "localtest.me",
 	})
+	cfg.Parameter = append(cfg.Parameter, &mirageecs.Parameter{
+		Name:     "env",
+		Env:      "ENV",
+		Required: true,
+	})
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -44,12 +80,8 @@ func TestE2EAPI(t *testing.T) {
 	})
 
 	t.Run("/api/launch", func(t *testing.T) {
-		v := url.Values{}
-		v.Add("subdomain", "mytask")
-		v.Add("taskdef", "dummy")
-		v.Add("branch", "develop")
-		req, _ := http.NewRequest("POST", ts.URL+"/api/launch", strings.NewReader(v.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req, _ := http.NewRequest("POST", ts.URL+"/api/launch", strings.NewReader(reqs["/api/launch"]))
+		req.Header.Set("Content-Type", contentType)
 		res, err := client.Do(req)
 		if err != nil {
 			t.Error(err)
@@ -113,10 +145,8 @@ func TestE2EAPI(t *testing.T) {
 	})
 
 	t.Run("/api/purge", func(t *testing.T) {
-		v := url.Values{}
-		v.Add("duration", "300")
-		req, _ := http.NewRequest("POST", ts.URL+"/api/purge", strings.NewReader(v.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req, _ := http.NewRequest("POST", ts.URL+"/api/purge", strings.NewReader(reqs["/api/purge"]))
+		req.Header.Set("Content-Type", contentType)
 		res, err := client.Do(req)
 		if err != nil {
 			t.Error(err)
@@ -128,18 +158,16 @@ func TestE2EAPI(t *testing.T) {
 			t.Errorf("body: %s", body)
 			return
 		}
-		var r mirageecs.APIPurgeResponse
+		var r mirageecs.APICommonResponse
 		json.NewDecoder(res.Body).Decode(&r)
-		if r.Status != "ok" {
+		if r.Result != "accepted" {
 			t.Errorf("result should be ok %#v", r)
 		}
 	})
 
 	t.Run("/api/terminate", func(t *testing.T) {
-		v := url.Values{}
-		v.Add("subdomain", "mytask")
-		req, _ := http.NewRequest("POST", ts.URL+"/api/terminate", strings.NewReader(v.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req, _ := http.NewRequest("POST", ts.URL+"/api/terminate", strings.NewReader(reqs["/api/terminate"]))
+		req.Header.Set("Content-Type", contentType)
 		res, err := client.Do(req)
 		if err != nil {
 			t.Error(err)
