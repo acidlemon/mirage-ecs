@@ -68,7 +68,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 			"httpd": port,
 		},
 		Env:  env,
-		tags: option.ToECSTags(subdomain, e.cfg.Parameter),
+		Tags: option.ToECSTags(subdomain, e.cfg.Parameter),
 	}
 	e.stopServerFuncs[id] = stopServerFunc
 	e.proxyControlCh <- &proxyControl{

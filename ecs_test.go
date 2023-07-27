@@ -2,6 +2,7 @@ package mirageecs_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -66,6 +67,83 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			envResult := tt.taskParam.ToEnv(tt.subdomain, tt.configParams)
 			if diff := cmp.Diff(envResult, tt.expectedEnv, opt); diff != "" {
 				t.Errorf("Mismatch in Env (-got +want):\n%s", diff)
+			}
+		})
+	}
+}
+
+var purgeTests = []struct {
+	name           string
+	duration       time.Duration
+	excludesMap    map[string]struct{}
+	excludeTagsMap map[string]string
+	expected       bool
+}{
+	{
+		name:     "young task",
+		duration: 10 * time.Minute,
+		expected: false,
+	},
+	{
+		name:     "old task",
+		duration: 1 * time.Minute,
+		expected: true,
+	},
+	{
+		name:     "excluded task",
+		duration: 1 * time.Minute,
+		excludesMap: map[string]struct{}{
+			"test": {},
+		},
+		expected: false,
+	},
+	{
+		name:     "excluded task not match",
+		duration: 1 * time.Minute,
+		excludesMap: map[string]struct{}{
+			"test2": {},
+		},
+		expected: true,
+	},
+	{
+		name:     "excluded tag",
+		duration: 1 * time.Minute,
+		excludeTagsMap: map[string]string{
+			"DontPurge": "true",
+		},
+		expected: false,
+	},
+	{
+		name:     "excluded tag not match",
+		duration: 1 * time.Minute,
+		excludeTagsMap: map[string]string{
+			"xxx": "true",
+		},
+		expected: true,
+	},
+}
+
+func TestShouldBePurged(t *testing.T) {
+	info := mirageecs.Information{
+		ID:         "0123456789abcdef",
+		ShortID:    "testshortid",
+		SubDomain:  "test",
+		GitBranch:  "develop",
+		TaskDef:    "dummy",
+		IPAddress:  "127.0.0.1",
+		Created:    time.Now().Add(-5 * time.Minute),
+		LastStatus: "RUNNING",
+		PortMap:    map[string]int{"http": 80},
+		Env:        map[string]string{"ENV": "test"},
+		Tags: []types.Tag{
+			{Key: aws.String("Subdomain"), Value: aws.String("test")},
+			{Key: aws.String("DontPurge"), Value: aws.String("true")},
+		},
+	}
+	for _, s := range purgeTests {
+		t.Run(s.name, func(t *testing.T) {
+			if info.ShouldBePurged(s.duration, s.excludesMap, s.excludeTagsMap) != s.expected {
+				t.Errorf("Mismatch in ShouldBePurged: %v", s)
 			}
 		})
 	}

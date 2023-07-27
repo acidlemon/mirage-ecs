@@ -16,7 +16,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 )
@@ -351,31 +350,18 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 		excludeTagsMap[k] = v
 	}
 	duration := time.Duration(di) * time.Second
-	begin := time.Now().Add(-duration)
 
 	infos, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
 		log.Println("[error] list ecs failed: ", err)
 		return http.StatusInternalServerError, err
 	}
+	log.Printf("[info] purge subdomains: duration=%s, excludes=%v, exclude_tags=%v", duration, excludes, excludeTags)
 	tm := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
-		if _, ok := excludesMap[info.SubDomain]; ok {
-			log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
-			continue
+		if info.ShouldBePurged(duration, excludesMap, excludeTagsMap) {
+			tm[info.SubDomain] = struct{}{}
 		}
-		for _, t := range info.tags {
-			k, v := aws.ToString(t.Key), aws.ToString(t.Value)
-			if ev, ok := excludeTagsMap[k]; ok && ev == v {
-				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
-				continue
-			}
-		}
-		if info.Created.After(begin) {
-			log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
-			continue
-		}
-		tm[info.SubDomain] = struct{}{}
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {
