@@ -1,18 +1,19 @@
 package mirageecs
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/route53"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	"github.com/aws/aws-sdk-go-v2/service/route53/types"
 )
 
 type Route53 struct {
-	svc          *route53.Route53
+	svc          *route53.Client
 	changes      []*route53Change
 	hostedZoneID *string
 	zoneName     string
@@ -37,16 +38,13 @@ func (c *route53Change) action() string {
 	}
 }
 
-func NewRoute53(cfg *Config) *Route53 {
-	sess := session.Must(session.NewSession(
-		&aws.Config{Region: aws.String(cfg.ECS.Region)},
-	))
-	svc := route53.New(sess)
+func NewRoute53(ctx context.Context, cfg *Config) *Route53 {
+	svc := route53.NewFromConfig(*cfg.awscfg)
 	r := &Route53{
 		svc: svc,
 	}
 	if id := cfg.Link.HostedZoneID; id != "" {
-		out, err := svc.GetHostedZone(&route53.GetHostedZoneInput{
+		out, err := svc.GetHostedZone(ctx, &route53.GetHostedZoneInput{
 			Id: aws.String(id),
 		})
 		if err != nil {
@@ -102,7 +100,7 @@ func (r *Route53) Delete(name string, addr string) {
 	r.changes = append(r.changes, change)
 }
 
-func (r *Route53) Apply() error {
+func (r *Route53) Apply(ctx context.Context) error {
 	if r.hostedZoneID == nil || len(r.changes) == 0 {
 		return nil
 	}
@@ -122,48 +120,48 @@ func (r *Route53) Apply() error {
 	}
 
 	// sum by name
-	var changes []*route53.Change
+	var changes []types.Change
 DELETES:
 	for name, cs := range deletes {
-		var records []*route53.ResourceRecord
+		var records []types.ResourceRecord
 		for _, c := range cs {
 			if len(addes[c.name]) > 0 {
 				continue DELETES // skip delete when adds exists
 			}
-			records = append(records, &route53.ResourceRecord{Value: &c.value})
+			records = append(records, types.ResourceRecord{Value: &c.value})
 		}
-		change := &route53.Change{
-			Action: aws.String("DELETE"),
-			ResourceRecordSet: &route53.ResourceRecordSet{
+		change := types.Change{
+			Action: "DELETE",
+			ResourceRecordSet: &types.ResourceRecordSet{
 				Name:            aws.String(name),
 				ResourceRecords: records,
 				TTL:             aws.Int64(60),
-				Type:            aws.String("A"),
+				Type:            types.RRTypeA,
 			},
 		}
 		changes = append(changes, change)
-		log.Printf("[info] route53 change: %s", change.String())
+		log.Printf("[info] route53 change: %v", change)
 	}
 	for name, cs := range addes {
-		var records []*route53.ResourceRecord
+		var records []types.ResourceRecord
 		for _, c := range cs {
-			records = append(records, &route53.ResourceRecord{Value: &c.value})
+			records = append(records, types.ResourceRecord{Value: &c.value})
 		}
-		change := &route53.Change{
-			Action: aws.String("UPSERT"),
-			ResourceRecordSet: &route53.ResourceRecordSet{
+		change := types.Change{
+			Action: "UPSERT",
+			ResourceRecordSet: &types.ResourceRecordSet{
 				Name:            aws.String(name),
 				ResourceRecords: records,
 				TTL:             aws.Int64(60),
-				Type:            aws.String("A"),
+				Type:            types.RRTypeA,
 			},
 		}
 		changes = append(changes, change)
-		log.Printf("[info] route53 change: %s", change.String())
+		log.Printf("[info] route53 change: %v", change)
 	}
 
-	_, err := r.svc.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
-		ChangeBatch: &route53.ChangeBatch{
+	_, err := r.svc.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
+		ChangeBatch: &types.ChangeBatch{
 			Changes: changes,
 		},
 		HostedZoneId: r.hostedZoneID,

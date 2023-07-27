@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -69,8 +70,8 @@ link:
 	if err := ioutil.WriteFile(f.Name(), []byte(data), 0644); err != nil {
 		t.Error(err)
 	}
-
-	cfg, err := mirageecs.NewConfig(&mirageecs.ConfigParams{Path: f.Name()})
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}
@@ -100,17 +101,17 @@ link:
 	if *provider.CapacityProvider != "test-strategy" {
 		t.Error("could not parse capacity provider strategy")
 	}
-	if *provider.Base != 1 {
+	if provider.Base != 1 {
 		t.Error("could not parse capacity provider strategy")
 	}
 	nc := cfg.ECS.NetworkConfiguration
-	if *nc.AwsVpcConfiguration.AssignPublicIp != "ENABLED" {
+	if nc.AwsVpcConfiguration.AssignPublicIp != "ENABLED" {
 		t.Error("could not parse network configuration")
 	}
-	if *nc.AwsVpcConfiguration.SecurityGroups[0] != "sg-gggg" {
+	if nc.AwsVpcConfiguration.SecurityGroups[0] != "sg-gggg" {
 		t.Error("could not parse network configuration")
 	}
-	if *nc.AwsVpcConfiguration.Subnets[0] != "subnet-aaaa" {
+	if nc.AwsVpcConfiguration.Subnets[0] != "subnet-aaaa" {
 		t.Error("could not parse network configuration")
 	}
 	if !*cfg.ECS.EnableExecuteCommand {

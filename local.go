@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -19,7 +20,7 @@ type LocalTaskRunner struct {
 
 	stopServerFuncs map[string]func()
 	cfg             *Config
-	proxyCh         chan *proxyControl
+	proxyControlCh  chan *proxyControl
 }
 
 func NewLocalTaskRunner(cfg *Config) TaskRunner {
@@ -31,10 +32,10 @@ func NewLocalTaskRunner(cfg *Config) TaskRunner {
 }
 
 func (e *LocalTaskRunner) SetProxyControlChannel(ch chan *proxyControl) {
-	e.proxyCh = ch
+	e.proxyControlCh = ch
 }
 
-func (e *LocalTaskRunner) List(status string) ([]Information, error) {
+func (e *LocalTaskRunner) List(_ context.Context, status string) ([]Information, error) {
 	infos := make([]Information, 0, len(e.Informations))
 	for _, info := range e.Informations {
 		infos = append(infos, info)
@@ -45,7 +46,7 @@ func (e *LocalTaskRunner) List(status string) ([]Information, error) {
 	return infos, nil
 }
 
-func (e *LocalTaskRunner) Launch(subdomain string, option TaskParameter, taskdefs ...string) error {
+func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
 	if info, ok := e.Informations[subdomain]; ok {
 		return fmt.Errorf("subdomain %s is already used by %s", subdomain, info.ID)
 	}
@@ -70,7 +71,7 @@ func (e *LocalTaskRunner) Launch(subdomain string, option TaskParameter, taskdef
 		tags: option.ToECSTags(subdomain, e.cfg.Parameter),
 	}
 	e.stopServerFuncs[id] = stopServerFunc
-	e.proxyCh <- &proxyControl{
+	e.proxyControlCh <- &proxyControl{
 		Action:    proxyAdd,
 		Subdomain: subdomain,
 		IPAddress: "127.0.0.1",
@@ -79,27 +80,27 @@ func (e *LocalTaskRunner) Launch(subdomain string, option TaskParameter, taskdef
 	return nil
 }
 
-func (e *LocalTaskRunner) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
+func (e *LocalTaskRunner) Logs(_ context.Context, subdomain string, since time.Time, tail int) ([]string, error) {
 	// Logs returns logs of the specified subdomain.
 	return []string{"Sorry. mock server logs are empty."}, nil
 }
 
-func (e *LocalTaskRunner) Terminate(id string) error {
+func (e *LocalTaskRunner) Terminate(ctx context.Context, id string) error {
 	for _, info := range e.Informations {
 		if info.ID == id {
-			return e.TerminateBySubdomain(info.SubDomain)
+			return e.TerminateBySubdomain(ctx, info.SubDomain)
 		}
 	}
 	return nil
 }
 
-func (e *LocalTaskRunner) TerminateBySubdomain(subdomain string) error {
+func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
 	log.Printf("[info] Terminating a mock task: subdomain=%s", subdomain)
 	if info, ok := e.Informations[subdomain]; ok {
 		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
 			stop()
 		}
-		e.proxyCh <- &proxyControl{
+		e.proxyControlCh <- &proxyControl{
 			Action:    proxyRemove,
 			Subdomain: subdomain,
 		}
@@ -128,12 +129,12 @@ func runMockServer(content string) (int, func()) {
 	return port, ts.Close
 }
 
-func (e *LocalTaskRunner) GetAccessCount(subdomain string, duration time.Duration) (int64, error) {
+func (e *LocalTaskRunner) GetAccessCount(_ context.Context, subdomain string, duration time.Duration) (int64, error) {
 	log.Println("[debug] GetAccessCount is not implemented in LocalTaskRunner")
 	return 0, nil
 }
 
-func (e *LocalTaskRunner) PutAccessCounts(_ map[string]accessCount) error {
+func (e *LocalTaskRunner) PutAccessCounts(_ context.Context, _ map[string]accessCount) error {
 	log.Println("[debug] PutAccessCounts is not implemented in LocalTaskRunner")
 	return nil
 }

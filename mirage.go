@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-//var app *Mirage
+var Version = "current"
 
 type Mirage struct {
 	Config       *Config
@@ -21,22 +21,22 @@ type Mirage struct {
 	ReverseProxy *ReverseProxy
 	Route53      *Route53
 
-	runner  TaskRunner
-	proxyCh chan *proxyControl
+	runner         TaskRunner
+	proxyControlCh chan *proxyControl
 }
 
-func New(cfg *Config) *Mirage {
+func New(ctx context.Context, cfg *Config) *Mirage {
 	// launch server
 	runner := cfg.NewTaskRunner()
-	proxyCh := make(chan *proxyControl, 10)
-	runner.SetProxyControlChannel(proxyCh)
+	ch := make(chan *proxyControl, 10)
+	runner.SetProxyControlChannel(ch)
 	m := &Mirage{
-		Config:       cfg,
-		ReverseProxy: NewReverseProxy(cfg),
-		WebApi:       NewWebApi(cfg, runner),
-		Route53:      NewRoute53(cfg),
-		runner:       runner,
-		proxyCh:      proxyCh,
+		Config:         cfg,
+		ReverseProxy:   NewReverseProxy(cfg),
+		WebApi:         NewWebApi(cfg, runner),
+		Route53:        NewRoute53(ctx, cfg),
+		runner:         runner,
+		proxyControlCh: ch,
 	}
 	return m
 }
@@ -58,18 +58,22 @@ func (m *Mirage) Run(ctx context.Context) {
 			mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 				m.ServeHTTPWithPort(w, req, port)
 			})
-
-			log.Println("[info] listen port:", port)
-			http.Serve(listener, mux)
+			log.Println("[info] listen addr:", laddr)
+			srv := &http.Server{
+				Handler: mux,
+			}
+			go srv.Serve(listener)
+			<-ctx.Done()
+			log.Println("[info] shutdown server:", laddr)
+			srv.Shutdown(ctx)
 		}(v.ListenPort)
 	}
 
 	wg.Add(2)
 	go m.syncECSToMirage(ctx, &wg)
 	go m.RunAccessCountCollector(ctx, &wg)
-	log.Println("[info] Launch succeeded!")
-
 	wg.Wait()
+	log.Println("[info] shutdown mirage-ecs")
 }
 
 func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, port int) {
@@ -79,7 +83,7 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 	case m.isWebApiHost(host):
 		m.WebApi.ServeHTTP(w, req)
 
-	case m.isDockerHost(host):
+	case m.isTaskHost(host):
 		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
 
 	case strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix):
@@ -94,7 +98,7 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 
 }
 
-func (m *Mirage) isDockerHost(host string) bool {
+func (m *Mirage) isTaskHost(host string) bool {
 	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
 		subdomain := strings.ToLower(strings.Split(host, ".")[0])
 		return m.ReverseProxy.Exists(subdomain)
@@ -127,7 +131,7 @@ func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup
 		all := m.ReverseProxy.CollectAccessCounts()
 		s, _ := json.Marshal(all)
 		log.Printf("[info] access counters: %s", string(s))
-		m.runner.PutAccessCounts(all)
+		m.runner.PutAccessCounts(ctx, all)
 	}
 }
 
@@ -148,7 +152,7 @@ func (app *Mirage) syncECSToMirage(ctx context.Context, wg *sync.WaitGroup) {
 SYNC:
 	for {
 		select {
-		case msg := <-app.proxyCh:
+		case msg := <-app.proxyControlCh:
 			log.Printf("[debug] proxyControl %#v", msg)
 			rp.Modify(msg)
 			continue SYNC
@@ -158,7 +162,7 @@ SYNC:
 			return
 		}
 
-		running, err := app.runner.List(statusRunning)
+		running, err := app.runner.List(ctx, statusRunning)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue
@@ -178,7 +182,7 @@ SYNC:
 			}
 		}
 
-		stopped, err := app.runner.List(statusStopped)
+		stopped, err := app.runner.List(ctx, statusStopped)
 		if err != nil {
 			log.Println("[warn]", err)
 			continue
@@ -195,7 +199,7 @@ SYNC:
 				rp.RemoveSubdomain(subdomain)
 			}
 		}
-		if err := r53.Apply(); err != nil {
+		if err := r53.Apply(ctx); err != nil {
 			log.Println("[warn]", err)
 		}
 	}

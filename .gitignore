@@ -1,6 +1,6 @@
 data
 mirage
-mirage-ecs
+./mirage-ecs
 *~
 .envrc
 pkg

@@ -1,6 +1,7 @@
 package mirageecs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -15,7 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 )
@@ -23,6 +24,8 @@ import (
 var DNSNameRegexpWithPattern = regexp.MustCompile(`^[a-zA-Z*?\[\]][a-zA-Z0-9-*?\[\]]{0,61}[a-zA-Z0-9*?\[\]]$`)
 
 const PurgeMinimumDuration = 5 * time.Minute
+
+const APICallTimeout = 30 * time.Second
 
 type WebApi struct {
 	*echo.Echo
@@ -37,7 +40,12 @@ type Template struct {
 }
 
 func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
+	if m, ok := data.(map[string]interface{}); ok {
+		m["Version"] = Version
+		return t.templates.ExecuteTemplate(w, name, m)
+	} else {
+		return t.templates.ExecuteTemplate(w, name, data)
+	}
 }
 
 func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
@@ -68,7 +76,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 }
 
 func (api *WebApi) List(c echo.Context) error {
-	info, err := api.runner.List(statusRunning)
+	info, err := api.runner.List(c.Request().Context(), statusRunning)
 	value := map[string]interface{}{
 		"info":  info,
 		"error": err,
@@ -106,7 +114,7 @@ func (api *WebApi) Terminate(c echo.Context) error {
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {
-	info, err := api.runner.List(statusRunning)
+	info, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
 		return c.JSON(500, APIListResponse{})
 	}
@@ -145,7 +153,9 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	if subdomain == "" || len(taskdefs) == 0 {
 		return http.StatusBadRequest, fmt.Errorf("parameter required: subdomain=%s, taskdef=%v", subdomain, taskdefs)
 	} else {
-		err := api.runner.Launch(subdomain, parameter, taskdefs...)
+		ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+		defer cancel()
+		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
 		if err != nil {
 			log.Println("[error] launch failed: ", err)
 			return http.StatusInternalServerError, err
@@ -215,7 +225,9 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 		}
 	}
 
-	logs, err := api.runner.Logs(subdomain, sinceTime, tailN)
+	ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+	defer cancel()
+	logs, err := api.runner.Logs(ctx, subdomain, sinceTime, tailN)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -225,12 +237,14 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 func (api *WebApi) terminate(c echo.Context) (int, error) {
 	id := c.FormValue("id")
 	subdomain := c.FormValue("subdomain")
+	ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
+	defer cancel()
 	if id != "" {
-		if err := api.runner.Terminate(id); err != nil {
+		if err := api.runner.Terminate(ctx, id); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else if subdomain != "" {
-		if err := api.runner.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.runner.TerminateBySubdomain(ctx, subdomain); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	} else {
@@ -247,7 +261,7 @@ func (api *WebApi) accessCounter(c echo.Context) (int, int64, int64, error) {
 		durationInt = 86400 // 24 hours
 	}
 	d := time.Duration(durationInt) * time.Second
-	sum, err := api.runner.GetAccessCount(subdomain, d)
+	sum, err := api.runner.GetAccessCount(c.Request().Context(), subdomain, d)
 	if err != nil {
 		log.Println("[error] access counter failed: ", err)
 		return http.StatusInternalServerError, 0, durationInt, err
@@ -342,7 +356,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	duration := time.Duration(di) * time.Second
 	begin := time.Now().Add(-duration)
 
-	infos, err := api.runner.List(statusRunning)
+	infos, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
 		log.Println("[error] list ecs failed: ", err)
 		return http.StatusInternalServerError, err
@@ -354,7 +368,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 			continue
 		}
 		for _, t := range info.tags {
-			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
+			k, v := aws.ToString(t.Key), aws.ToString(t.Value)
 			if ev, ok := excludeTagsMap[k]; ok && ev == v {
 				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
 				continue
@@ -368,13 +382,14 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {
-		go api.purgeSubdomains(terminates, duration)
+		// running in background. Don't cancel by client context.
+		go api.purgeSubdomains(context.Background(), terminates, duration)
 	}
 
 	return http.StatusOK, nil
 }
 
-func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) {
+func (api *WebApi) purgeSubdomains(ctx context.Context, subdomains []string, duration time.Duration) {
 	if api.mu.TryLock() {
 		defer api.mu.Unlock()
 	} else {
@@ -384,7 +399,7 @@ func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) 
 	log.Printf("[info] start purge subdomains %d", len(subdomains))
 	purged := 0
 	for _, subdomain := range subdomains {
-		sum, err := api.runner.GetAccessCount(subdomain, duration)
+		sum, err := api.runner.GetAccessCount(ctx, subdomain, duration)
 		if err != nil {
 			log.Printf("[warn] access count failed: %s %s", subdomain, err)
 			continue
@@ -393,7 +408,7 @@ func (api *WebApi) purgeSubdomains(subdomains []string, duration time.Duration) 
 			log.Printf("[info] skip purge %s %d access", subdomain, sum)
 			continue
 		}
-		if err := api.runner.TerminateBySubdomain(subdomain); err != nil {
+		if err := api.runner.TerminateBySubdomain(ctx, subdomain); err != nil {
 			log.Printf("[warn] terminate failed %s %s", subdomain, err)
 		} else {
 			purged++
