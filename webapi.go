@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/samber/lo"
 	"gopkg.in/acidlemon/rocket.v2"
 )
@@ -376,8 +375,6 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 		excludeTagsMap[k] = v
 	}
 	duration := time.Duration(di) * time.Second
-	begin := time.Now().Add(-duration)
-
 	infos, err := app.ECS.List(statusRunning)
 	if err != nil {
 		c.Res().StatusCode = http.StatusInternalServerError
@@ -388,22 +385,9 @@ func (api *WebApi) purge(c rocket.CtxData) rocket.RenderVars {
 	}
 	tm := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
-		if _, ok := excludesMap[info.SubDomain]; ok {
-			log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
-			continue
+		if info.ShouldBePurged(duration, excludesMap, excludeTagsMap) {
+			tm[info.SubDomain] = struct{}{}
 		}
-		for _, t := range info.tags {
-			k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
-			if ev, ok := excludeTagsMap[k]; ok && ev == v {
-				log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
-				continue
-			}
-		}
-		if info.Created.After(begin) {
-			log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
-			continue
-		}
-		tm[info.SubDomain] = struct{}{}
 	}
 	terminates := lo.Keys(tm)
 	if len(terminates) > 0 {

@@ -30,9 +30,29 @@ type Information struct {
 	LastStatus string            `json:"last_status"`
 	PortMap    map[string]int    `json:"port_map"`
 	Env        map[string]string `json:"env"`
+	Tags       []*ecs.Tag        `json:"tags"`
 
-	tags []*ecs.Tag
 	task *ecs.Task
+}
+
+func (info Information) ShouldBePurged(duration time.Duration, excludesMap map[string]struct{}, excludeTagsMap map[string]string) bool {
+	begin := time.Now().Add(-duration)
+	if _, ok := excludesMap[info.SubDomain]; ok {
+		log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
+		return false
+	}
+	for _, t := range info.Tags {
+		k, v := aws.StringValue(t.Key), aws.StringValue(t.Value)
+		if ev, ok := excludeTagsMap[k]; ok && ev == v {
+			log.Printf("[info] skip exclude tag: %s=%s subdomain: %s", k, v, info.SubDomain)
+			return false
+		}
+	}
+	if info.Created.After(begin) {
+		log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
+		return false
+	}
+	return true
 }
 
 type TaskParameter map[string]string
@@ -451,7 +471,7 @@ func (d *ECS) List(desiredStatus string) ([]Information, error) {
 				IPAddress:  getIPV4AddressFromTask(task),
 				LastStatus: *task.LastStatus,
 				Env:        getEnvironmentsFromTask(task),
-				tags:       task.Tags,
+				Tags:       task.Tags,
 				task:       task,
 			}
 			if portMap, err := d.portMapInTask(task); err != nil {
