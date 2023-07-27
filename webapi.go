@@ -130,21 +130,21 @@ func (api *WebApi) ApiLaunch(c echo.Context) error {
 }
 
 func (api *WebApi) launch(c echo.Context) (int, error) {
-	subdomain := c.FormValue("subdomain")
+	r := APILaunchRequest{}
+	ps, _ := c.FormParams()
+	r.MergeForm(ps)
+	if err := c.Bind(&r); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	subdomain := r.Subdomain
 	subdomain = strings.ToLower(subdomain)
 	if err := validateSubdomain(subdomain); err != nil {
 		log.Println("[error] launch failed: ", err)
 		return http.StatusBadRequest, err
 	}
-
-	ps, err := c.FormParams()
-	if err != nil {
-		log.Println("[error] failed to get form params: ", err)
-		return http.StatusInternalServerError, err
-	}
-	taskdefs := ps["taskdef"]
-
-	parameter, err := api.LoadParameter(c.FormValue)
+	taskdefs := r.Taskdef
+	parameter, err := api.LoadParameter(r.GetParameter)
 	if err != nil {
 		log.Println("[error] failed to load parameter: ", err)
 		return http.StatusBadRequest, err
@@ -161,7 +161,6 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 			return http.StatusInternalServerError, err
 		}
 	}
-
 	return http.StatusOK, nil
 }
 
@@ -194,7 +193,7 @@ func (api *WebApi) ApiPurge(c echo.Context) error {
 	if err != nil {
 		return c.JSON(code, APICommonResponse{Result: err.Error()})
 	}
-	return c.JSON(code, APIPurgeResponse{Status: "ok"})
+	return c.JSON(code, APICommonResponse{Result: "accepted"})
 }
 
 func (api *WebApi) logs(c echo.Context) (int, []string, error) {
@@ -235,8 +234,13 @@ func (api *WebApi) logs(c echo.Context) (int, []string, error) {
 }
 
 func (api *WebApi) terminate(c echo.Context) (int, error) {
-	id := c.FormValue("id")
-	subdomain := c.FormValue("subdomain")
+	r := APITerminateRequest{}
+	if err := c.Bind(&r); err != nil {
+		return http.StatusBadRequest, err
+	}
+	id := r.ID
+	subdomain := r.Subdomain
+
 	ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
 	defer cancel()
 	if id != "" {
@@ -317,20 +321,16 @@ func validateSubdomain(s string) error {
 }
 
 func (api *WebApi) purge(c echo.Context) (int, error) {
-	ps, err := c.FormParams()
-	if err != nil {
-		return http.StatusInternalServerError, err
+	r := APIPurgeRequest{}
+	if err := c.Bind(&r); err != nil {
+		return http.StatusBadRequest, err
 	}
-	excludes := ps["excludes"]
-	excludeTags := ps["exclude_tags"]
-	d := c.FormValue("duration")
-	di, err := strconv.ParseInt(d, 10, 64)
+	excludes := r.Excludes
+	excludeTags := r.ExcludeTags
+	di := r.Duration
 	mininum := int64(PurgeMinimumDuration.Seconds())
-	if err != nil || di < mininum {
-		msg := fmt.Sprintf("invalid duration %s (at least %d)", d, mininum)
-		if err != nil {
-			msg += ": " + err.Error()
-		}
+	if di < mininum {
+		msg := fmt.Sprintf("invalid duration %d (at least %d)", di, mininum)
 		log.Printf("[error] %s", msg)
 		return http.StatusBadRequest, errors.New(msg)
 	}
@@ -344,9 +344,6 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 		p := strings.SplitN(excludeTag, ":", 2)
 		if len(p) != 2 {
 			msg := fmt.Sprintf("invalid exclude_tags format %s", excludeTag)
-			if err != nil {
-				msg += ": " + err.Error()
-			}
 			log.Println("[error]", msg)
 			return http.StatusBadRequest, errors.New(msg)
 		}

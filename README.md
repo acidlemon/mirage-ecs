@@ -379,7 +379,7 @@ Parameters:
 
 ```json
 {
-  "status": "ok"
+  "result": "accepted",
 }
 ```
 
