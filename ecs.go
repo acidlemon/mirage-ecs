@@ -11,6 +11,7 @@ import (
 	"time"
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
+	"github.com/samber/lo"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cw "github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -529,7 +530,12 @@ func (e *ECS) portMapInTask(ctx context.Context, task *types.Task) (map[string]i
 }
 
 func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// truncate to minute
+	// Period must be a multiple of 60
+	// https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_GetMetricData.html
+	duration = duration.Truncate(time.Minute)
+
+	ctx, cancel := context.WithTimeout(ctx, APICallTimeout)
 	defer cancel()
 	res, err := e.cwSvc.GetMetricData(ctx, &cw.GetMetricDataInput{
 		StartTime: aws.Time(time.Now().Add(-duration)),
@@ -567,13 +573,11 @@ func (e *ECS) GetAccessCount(ctx context.Context, subdomain string, duration tim
 }
 
 func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) error {
-	pmInput := cw.PutMetricDataInput{
-		Namespace: aws.String(CloudWatchMetricNameSpace),
-	}
+	metricData := make([]cwTypes.MetricDatum, 0, len(all))
 	for subdomain, counters := range all {
 		for ts, count := range counters {
 			log.Printf("[debug] access for %s %s %d", subdomain, ts.Format(time.RFC3339), count)
-			pmInput.MetricData = append(pmInput.MetricData, cwTypes.MetricDatum{
+			metricData = append(metricData, cwTypes.MetricDatum{
 				MetricName: aws.String(CloudWatchMetricName),
 				Timestamp:  aws.Time(ts),
 				Value:      aws.Float64(float64(count)),
@@ -586,11 +590,20 @@ func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) e
 			})
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	if len(pmInput.MetricData) > 0 {
-		_, err := e.cwSvc.PutMetricData(ctx, &pmInput)
-		return err
+	// CloudWatch API has a limit of 20 metric data per request
+	var eg errgroup.Group
+	for _, chunk := range lo.Chunk(metricData, 20) {
+		chunk := chunk
+		eg.Go(func() error {
+			ctx, cancel := context.WithTimeout(ctx, APICallTimeout)
+			defer cancel()
+			pmInput := cw.PutMetricDataInput{
+				Namespace:  aws.String(CloudWatchMetricNameSpace),
+				MetricData: chunk,
+			}
+			_, err := e.cwSvc.PutMetricData(ctx, &pmInput)
+			return err
+		})
 	}
-	return nil
+	return eg.Wait()
 }
