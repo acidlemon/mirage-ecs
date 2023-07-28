@@ -4,7 +4,7 @@ ADD . /stash/src/github.com/acidlemon/mirage-ecs
 WORKDIR /stash/src/github.com/acidlemon/mirage-ecs
 ENV GOPATH=/stash
 
-RUN make && mv mirage-ecs /stash/
+RUN make clean && make && mv mirage-ecs /stash/
 RUN cp -a html /stash/
 RUN cp docker/example-config.yml /stash/
 
