@@ -14,10 +14,9 @@
   <style type="text/css">
     .glyphicon-refresh-animate {
       -animation: spin .7s infinite linear;
-      -webkit-animation: spin2 .7s infinite linear;
     }
 
-    @-webkit-keyframes spin2 {
+    @keyframes spin2 {
       from {
         -webkit-transform: rotate(0deg);
       }
@@ -60,8 +59,10 @@
     <div class="row">
       {{ end }}
 
-
       {{ define "footer" }}
+      <footer>
+        <p>version: {{ .Version }}</p>
+      </footer>
     </div>
   </div>
 

@@ -1,6 +1,7 @@
-package main
+package mirageecs
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -13,30 +14,30 @@ import (
 	"time"
 )
 
-type ECSLocal struct {
-	// ECSLocal is a local mock ECS implementation for Mirage.
+// LocalTaskRunner is a mock implementation of TaskRunner.
+type LocalTaskRunner struct {
 	Informations map[string]Information
 
-	stopServers map[string]func()
-	cfg         *Config
+	stopServerFuncs map[string]func()
+	cfg             *Config
+	proxyControlCh  chan *proxyControl
 }
 
-func NewECSLocal(cfg *Config) *ECSLocal {
-	// NewECSLocal returns a new ECSLocal instance.
-	return &ECSLocal{
-		Informations: map[string]Information{},
-		stopServers:  map[string]func(){},
-		cfg:          cfg,
+func NewLocalTaskRunner(cfg *Config) TaskRunner {
+	return &LocalTaskRunner{
+		Informations:    map[string]Information{},
+		stopServerFuncs: map[string]func(){},
+		cfg:             cfg,
 	}
 }
 
-func (ecs *ECSLocal) Run() {
-	// Run starts the ECSLocal instance.
+func (e *LocalTaskRunner) SetProxyControlChannel(ch chan *proxyControl) {
+	e.proxyControlCh = ch
 }
 
-func (ecs *ECSLocal) List(status string) ([]Information, error) {
-	infos := make([]Information, 0, len(ecs.Informations))
-	for _, info := range ecs.Informations {
+func (e *LocalTaskRunner) List(_ context.Context, status string) ([]Information, error) {
+	infos := make([]Information, 0, len(e.Informations))
+	for _, info := range e.Informations {
 		infos = append(infos, info)
 	}
 	sort.Slice(infos, func(i, j int) bool {
@@ -45,16 +46,16 @@ func (ecs *ECSLocal) List(status string) ([]Information, error) {
 	return infos, nil
 }
 
-func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...string) error {
-	if info, ok := ecs.Informations[subdomain]; ok {
+func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
+	if info, ok := e.Informations[subdomain]; ok {
 		return fmt.Errorf("subdomain %s is already used by %s", subdomain, info.ID)
 	}
 	id := generateRandomHexID(32)
-	env := option.ToEnv(subdomain, ecs.cfg.Parameter)
+	env := option.ToEnv(subdomain, e.cfg.Parameter)
 	log.Printf("[info] Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id)
 	contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
-	port, stopServer := runMockServer(contents)
-	ecs.Informations[subdomain] = Information{
+	port, stopServerFunc := runMockServer(contents)
+	e.Informations[subdomain] = Information{
 		ID:         "arn:aws:ecs:ap-northeast-1:123456789012:task/mirage/" + id,
 		ShortID:    id,
 		SubDomain:  subdomain,
@@ -62,41 +63,48 @@ func (ecs *ECSLocal) Launch(subdomain string, option TaskParameter, taskdefs ...
 		TaskDef:    taskdefs[0],
 		IPAddress:  "127.0.0.1",
 		Created:    time.Now().UTC(),
-		LastStatus: "RUNNING",
+		LastStatus: statusRunning,
 		PortMap: map[string]int{
 			"httpd": port,
 		},
 		Env:  env,
-		Tags: option.ToECSTags(subdomain, ecs.cfg.Parameter),
+		Tags: option.ToECSTags(subdomain, e.cfg.Parameter),
 	}
-	ecs.stopServers[id] = stopServer
-	app.ReverseProxy.AddSubdomain(subdomain, "127.0.0.1", port)
+	e.stopServerFuncs[id] = stopServerFunc
+	e.proxyControlCh <- &proxyControl{
+		Action:    proxyAdd,
+		Subdomain: subdomain,
+		IPAddress: "127.0.0.1",
+		Port:      port,
+	}
 	return nil
 }
 
-func (ecs *ECSLocal) Logs(subdomain string, since time.Time, tail int) ([]string, error) {
+func (e *LocalTaskRunner) Logs(_ context.Context, subdomain string, since time.Time, tail int) ([]string, error) {
 	// Logs returns logs of the specified subdomain.
 	return []string{"Sorry. mock server logs are empty."}, nil
 }
 
-func (ecs *ECSLocal) Terminate(id string) error {
-	for _, info := range ecs.Informations {
+func (e *LocalTaskRunner) Terminate(ctx context.Context, id string) error {
+	for _, info := range e.Informations {
 		if info.ID == id {
-			return ecs.TerminateBySubdomain(info.SubDomain)
+			return e.TerminateBySubdomain(ctx, info.SubDomain)
 		}
 	}
 	return nil
 }
 
-func (ecs *ECSLocal) TerminateBySubdomain(subdomain string) error {
+func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
 	log.Printf("[info] Terminating a mock task: subdomain=%s", subdomain)
-	if info, ok := ecs.Informations[subdomain]; ok {
-		stopServer := ecs.stopServers[info.ShortID]
-		if stopServer != nil {
-			stopServer()
+	if info, ok := e.Informations[subdomain]; ok {
+		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
+			stop()
 		}
-		app.ReverseProxy.RemoveSubdomain(info.SubDomain)
-		delete(ecs.Informations, subdomain)
+		e.proxyControlCh <- &proxyControl{
+			Action:    proxyRemove,
+			Subdomain: subdomain,
+		}
+		delete(e.Informations, subdomain)
 	}
 	return nil
 }
@@ -119,4 +127,14 @@ func runMockServer(content string) (int, func()) {
 	u, _ := url.Parse(ts.URL)
 	port, _ := strconv.Atoi(u.Port())
 	return port, ts.Close
+}
+
+func (e *LocalTaskRunner) GetAccessCount(_ context.Context, subdomain string, duration time.Duration) (int64, error) {
+	log.Println("[debug] GetAccessCount is not implemented in LocalTaskRunner")
+	return 0, nil
+}
+
+func (e *LocalTaskRunner) PutAccessCounts(_ context.Context, _ map[string]accessCount) error {
+	log.Println("[debug] PutAccessCounts is not implemented in LocalTaskRunner")
+	return nil
 }

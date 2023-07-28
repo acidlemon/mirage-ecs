@@ -1,4 +1,4 @@
-package main
+package mirageecs
 
 import (
 	"log"
@@ -58,7 +58,7 @@ func NewReverseProxy(cfg *Config) *ReverseProxy {
 func (r *ReverseProxy) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, port int) {
 	subdomain := strings.ToLower(strings.Split(req.Host, ".")[0])
 
-	if handler := r.findHandler(subdomain, port); handler != nil {
+	if handler := r.FindHandler(subdomain, port); handler != nil {
 		log.Printf("[debug] proxy handler found for subdomain %s", subdomain)
 		handler.ServeHTTP(w, req)
 	} else {
@@ -90,10 +90,10 @@ func (r *ReverseProxy) Subdomains() []string {
 	return ds
 }
 
-func (r *ReverseProxy) findHandler(subdomain string, port int) http.Handler {
+func (r *ReverseProxy) FindHandler(subdomain string, port int) http.Handler {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	log.Printf("[debug] findHandler for %s:%d", subdomain, port)
+	log.Printf("[debug] FindHandler for %s:%d", subdomain, port)
 
 	proxyHandlers, ok := r.domainMap[subdomain]
 	if !ok {
@@ -264,14 +264,14 @@ func (r *ReverseProxy) Modify(action *proxyControl) {
 	}
 }
 
-func (r *ReverseProxy) CollectAccessCounters() map[string]map[time.Time]int64 {
+func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	counters := make(map[string]map[time.Time]int64)
+	counts := make(map[string]accessCount)
 	for subdomain, counter := range r.accessCounters {
-		counters[subdomain] = counter.Collect()
+		counts[subdomain] = counter.Collect()
 	}
-	return counters
+	return counts
 }
 
 type countingTransport struct {

@@ -1,23 +1,27 @@
-package main
+package mirageecs_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestReverseProxy(t *testing.T) {
-	cfg, err := NewConfig(&ConfigParams{
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		Domain: "example.net",
 	})
 	if err != nil {
 		t.Error(err)
 	}
-	cfg.Listen.HTTP = []PortMap{
+	cfg.Listen.HTTP = []mirageecs.PortMap{
 		{ListenPort: 80, TargetPort: 80},
 		{ListenPort: 8080, TargetPort: 8080},
 	}
-	rp := NewReverseProxy(cfg)
+	rp := mirageecs.NewReverseProxy(cfg)
 
 	if ds := rp.Subdomains(); len(ds) != 0 {
 		t.Errorf("invalid subdomains %#v", ds)
@@ -47,7 +51,7 @@ func TestReverseProxy(t *testing.T) {
 	}
 
 	for _, port := range []int{80, 8080} {
-		h := rp.findHandler("aaa", port)
+		h := rp.FindHandler("aaa", port)
 		if h == nil {
 			t.Errorf("handler not found for aaa:%d", port)
 		}
@@ -70,21 +74,21 @@ func TestReverseProxy(t *testing.T) {
 	}
 
 	{
-		h1 := rp.findHandler("foo-999", 80)
+		h1 := rp.FindHandler("foo-999", 80)
 		if h1 == nil {
 			t.Errorf("handler not found for foo-999")
 		}
-		h2 := rp.findHandler("foo-baz", 80) // foo-baz is matched with "foo-*"
+		h2 := rp.FindHandler("foo-baz", 80) // foo-baz is matched with "foo-*"
 		if h2 != h1 {
 			t.Errorf("handler not matched for foo-*")
 		}
 	}
 	{
-		h1 := rp.findHandler("foo-bar-999", 80)
+		h1 := rp.FindHandler("foo-bar-999", 80)
 		if h1 == nil {
 			t.Errorf("handler not found for foo-bar-999")
 		}
-		h2 := rp.findHandler("foo-bar-baz", 80) // foo-bar-baz is matched with "foo-*"
+		h2 := rp.FindHandler("foo-bar-baz", 80) // foo-bar-baz is matched with "foo-*"
 		if h2 != h1 {
 			t.Errorf("handler not matched for foo-*")
 		}

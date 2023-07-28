@@ -1,6 +1,7 @@
-package main
+package mirageecs_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -10,13 +11,16 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/acidlemon/rocket.v2"
+	mirageecs "github.com/acidlemon/mirage-ecs"
+	"github.com/labstack/echo/v4"
 )
 
 func TestLoadParameter(t *testing.T) {
+	ctx := context.Background()
+
 	testFile := "config_sample.yml"
-	cfg, _ := NewConfig(&ConfigParams{Path: testFile})
-	app := NewWebApi(cfg)
+	cfg, _ := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: testFile})
+	app := mirageecs.NewWebApi(cfg, &mirageecs.LocalTaskRunner{})
 
 	params := url.Values{}
 	params.Set("nick", "mirageman")
@@ -28,10 +32,9 @@ func TestLoadParameter(t *testing.T) {
 		t.Error(err)
 	}
 
-	args := rocket.Args{}
-	c := rocket.NewContext(req, args, nil)
-
-	parameter, err := app.loadParameter(c)
+	e := echo.New()
+	c := e.NewContext(req, nil)
+	parameter, err := app.LoadParameter(c.FormValue)
 
 	if err != nil {
 		t.Error(err)
@@ -77,15 +80,14 @@ parameters:
 		t.Error(err)
 	}
 
-	cfg, err = NewConfig(&ConfigParams{Path: f.Name()})
+	cfg, err = mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{Path: f.Name()})
 	if err != nil {
 		t.Error(err)
 	}
-	app = NewWebApi(cfg)
+	app = mirageecs.NewWebApi(cfg, &mirageecs.LocalTaskRunner{})
 
-	c = rocket.NewContext(req, args, nil)
-	parameter, err = app.loadParameter(c)
-
+	c = e.NewContext(req, nil)
+	parameter, err = app.LoadParameter(c.FormValue)
 	if err != nil {
 		t.Error(err)
 	}
@@ -108,8 +110,8 @@ parameters:
 		t.Error(err)
 	}
 
-	c = rocket.NewContext(req, args, nil)
-	_, err = app.loadParameter(c)
+	c = e.NewContext(req, nil)
+	_, err = app.LoadParameter(c.FormValue)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -124,8 +126,8 @@ parameters:
 		t.Error(err)
 	}
 
-	c = rocket.NewContext(req, args, nil)
-	_, err = app.loadParameter(c)
+	c = e.NewContext(req, nil)
+	_, err = app.LoadParameter(c.FormValue)
 
 	if err == nil {
 		t.Error("Not apply parameter rule")
@@ -164,13 +166,13 @@ var invalidSubdomains = []string{
 
 func TestValidateSubdomain(t *testing.T) {
 	for _, s := range validSubdomains {
-		if err := validateSubdomain(s); err != nil {
+		if err := mirageecs.ValidateSubdomain(s); err != nil {
 			t.Errorf("%s should be valid", s)
 		}
 	}
 
 	for _, s := range invalidSubdomains {
-		if err := validateSubdomain(s); err == nil {
+		if err := mirageecs.ValidateSubdomain(s); err == nil {
 			t.Errorf("%s should be invalid", s)
 		}
 	}
