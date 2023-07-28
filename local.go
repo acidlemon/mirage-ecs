@@ -63,7 +63,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 		TaskDef:    taskdefs[0],
 		IPAddress:  "127.0.0.1",
 		Created:    time.Now().UTC(),
-		LastStatus: "RUNNING",
+		LastStatus: statusRunning,
 		PortMap: map[string]int{
 			"httpd": port,
 		},

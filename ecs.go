@@ -42,7 +42,10 @@ type Information struct {
 }
 
 func (info Information) ShouldBePurged(duration time.Duration, excludesMap map[string]struct{}, excludeTagsMap map[string]string) bool {
-	begin := time.Now().Add(-duration)
+	if info.LastStatus != statusRunning {
+		log.Printf("[info] skip not running task: %s subdomain: %s", info.LastStatus, info.SubDomain)
+		return false
+	}
 	if _, ok := excludesMap[info.SubDomain]; ok {
 		log.Printf("[info] skip exclude subdomain: %s", info.SubDomain)
 		return false
@@ -54,6 +57,7 @@ func (info Information) ShouldBePurged(duration time.Duration, excludesMap map[s
 			return false
 		}
 	}
+	begin := time.Now().Add(-duration)
 	if info.Created.After(begin) {
 		log.Printf("[info] skip recent created: %s subdomain: %s", info.Created.Format(time.RFC3339), info.SubDomain)
 		return false
@@ -125,8 +129,8 @@ const (
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
 
-	statusRunning = "RUNNING"
-	statusStopped = "STOPPED"
+	statusRunning = string(types.DesiredStatusRunning)
+	statusStopped = string(types.DesiredStatusStopped)
 )
 
 type TaskRunner interface {
