@@ -535,6 +535,7 @@ For example, if you specify `duration=86400`, mirage-ecs terminates tasks that m
 
 This API works ansynchronously. The response is returned immediately. mirage-ecs terminates tasks in the background.
 
+Note: `duration` accepts a value of integer or string. You can also specify by string type, for example, `{"duration":"86400"}`.
 
 #### Response
 

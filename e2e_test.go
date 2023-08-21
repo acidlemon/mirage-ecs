@@ -30,7 +30,7 @@ var e2eRequestsForm = map[string]string{
 
 var e2eRequestsJSON = map[string]string{
 	"/api/launch":    `{"subdomain":"mytask","taskdef":["dummy"],"branch":"develop","parameters":{"env":"test"}}`,
-	"/api/purge":     `{"duration":300}`,
+	"/api/purge":     `{"duration":"300"}`,
 	"/api/terminate": `{"subdomain":"mytask"}`,
 }
 

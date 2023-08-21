@@ -1,6 +1,9 @@
 package mirageecs
 
-import "net/url"
+import (
+	"encoding/json"
+	"net/url"
+)
 
 // APIListResponse is a response of /api/list
 type APIListResponse struct {
@@ -52,9 +55,9 @@ func (r *APILaunchRequest) MergeForm(form url.Values) {
 }
 
 type APIPurgeRequest struct {
-	Duration    int64    `json:"duration" form:"duration"`
-	Excludes    []string `json:"excludes" form:"excludes"`
-	ExcludeTags []string `json:"exclude_tags" form:"exclude_tags"`
+	Duration    json.Number `json:"duration" form:"duration"`
+	Excludes    []string    `json:"excludes" form:"excludes"`
+	ExcludeTags []string    `json:"exclude_tags" form:"exclude_tags"`
 }
 
 type APITerminateRequest struct {
