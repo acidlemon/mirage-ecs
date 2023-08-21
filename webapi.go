@@ -326,7 +326,12 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	}
 	excludes := r.Excludes
 	excludeTags := r.ExcludeTags
-	di := r.Duration
+	di, err := r.Duration.Int64()
+	if err != nil {
+		msg := fmt.Sprintf("invalid duration %s", r.Duration)
+		log.Printf("[error] %s", msg)
+		return http.StatusBadRequest, errors.New(msg)
+	}
 	mininum := int64(PurgeMinimumDuration.Seconds())
 	if di < mininum {
 		msg := fmt.Sprintf("invalid duration %d (at least %d)", di, mininum)
