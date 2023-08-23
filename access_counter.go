@@ -10,19 +10,19 @@ import (
 type accessCount map[time.Time]int64
 
 // accessCounter is a thread-safe counter for access
-type accessCounter struct {
+type AccessCounter struct {
 	mu    *sync.Mutex
 	unit  time.Duration
 	count accessCount
 }
 
-// newAccessCounter returns a new access counter
+// NewAccessCounter returns a new access counter
 // unit is the time unit for the counter (default: time.Minute)
-func newAccessCounter(unit time.Duration) *accessCounter {
+func NewAccessCounter(unit time.Duration) *AccessCounter {
 	if unit == 0 {
 		unit = time.Minute
 	}
-	c := &accessCounter{
+	c := &AccessCounter{
 		mu:    new(sync.Mutex),
 		count: make(accessCount, 2), // 2 is enough for most cases
 		unit:  unit,
@@ -32,7 +32,7 @@ func newAccessCounter(unit time.Duration) *accessCounter {
 }
 
 // Add increments the access counter
-func (c *accessCounter) Add() {
+func (c *AccessCounter) Add() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := time.Now().Truncate(c.unit)
@@ -40,7 +40,7 @@ func (c *accessCounter) Add() {
 }
 
 // Collect returns the access count and resets the counter
-func (c *accessCounter) Collect() accessCount {
+func (c *AccessCounter) Collect() accessCount {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	r := make(accessCount, len(c.count))
@@ -52,6 +52,6 @@ func (c *accessCounter) Collect() accessCount {
 	return r
 }
 
-func (c *accessCounter) fill() {
+func (c *AccessCounter) fill() {
 	c.count[time.Now().Truncate(c.unit)] = 0
 }

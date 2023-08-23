@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsv2Config "github.com/aws/aws-sdk-go-v2/config"
@@ -30,12 +31,13 @@ var DefaultParameter = &Parameter{
 }
 
 type Config struct {
-	Host      Host       `yaml:"host"`
-	Listen    Listen     `yaml:"listen"`
-	HtmlDir   string     `yaml:"htmldir"`
-	Parameter Parameters `yaml:"parameters"`
-	ECS       ECSCfg     `yaml:"ecs"`
-	Link      Link       `yaml:"link"`
+	Host         Host          `yaml:"host"`
+	Listen       Listen        `yaml:"listen"`
+	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
+	HtmlDir      string        `yaml:"htmldir"`
+	Parameter    Parameters    `yaml:"parameters"`
+	ECS          ECSCfg        `yaml:"ecs"`
+	Link         Link          `yaml:"link"`
 
 	localMode bool
 	awscfg    *aws.Config

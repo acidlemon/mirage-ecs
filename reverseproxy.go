@@ -1,6 +1,9 @@
 package mirageecs
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -36,7 +39,7 @@ type ReverseProxy struct {
 	cfg               *Config
 	domains           []string
 	domainMap         map[string]proxyHandlers
-	accessCounters    map[string]*accessCounter
+	accessCounters    map[string]*AccessCounter
 	accessCounterUnit time.Duration
 }
 
@@ -50,7 +53,7 @@ func NewReverseProxy(cfg *Config) *ReverseProxy {
 	return &ReverseProxy{
 		cfg:               cfg,
 		domainMap:         make(map[string]proxyHandlers),
-		accessCounters:    make(map[string]*accessCounter),
+		accessCounters:    make(map[string]*AccessCounter),
 		accessCounterUnit: unit,
 	}
 }
@@ -196,11 +199,11 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		ph = make(proxyHandlers)
 	}
 
-	var counter *accessCounter
+	var counter *AccessCounter
 	if c, exists := r.accessCounters[subdomain]; exists {
 		counter = c
 	} else {
-		counter = newAccessCounter(r.accessCounterUnit)
+		counter = NewAccessCounter(r.accessCounterUnit)
 		r.accessCounters[subdomain] = counter
 	}
 
@@ -223,9 +226,11 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 			continue
 		}
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-		handler.Transport = &countingTransport{
-			transport: http.DefaultTransport, // TODO set timeout
-			counter:   counter,
+		handler.Transport = &Transport{
+			Transport: http.DefaultTransport,
+			Counter:   counter,
+			Timeout:   r.cfg.ProxyTimeout,
+			Subdomain: subdomain,
 		}
 		ph.add(v.ListenPort, addr, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
@@ -274,12 +279,37 @@ func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 	return counts
 }
 
-type countingTransport struct {
-	counter   *accessCounter
-	transport http.RoundTripper
+type Transport struct {
+	Counter   *AccessCounter
+	Transport http.RoundTripper
+	Timeout   time.Duration
+	Subdomain string
 }
 
-func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	t.counter.Add()
-	return t.transport.RoundTrip(req)
+func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.Counter.Add()
+	if t.Timeout == 0 {
+		return t.Transport.RoundTrip(req)
+	}
+	ctx, cancel := context.WithTimeout(req.Context(), t.Timeout)
+	defer cancel()
+	resp, err := t.Transport.RoundTrip(req.WithContext(ctx))
+	if err == nil {
+		return resp, nil
+	}
+	log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+
+	// timeout
+	if ctx.Err() == context.DeadlineExceeded {
+		return newTimeoutResponse(t.Subdomain, req.URL.String()), nil
+	}
+	return resp, err
+}
+
+func newTimeoutResponse(subdomain string, u string) *http.Response {
+	resp := new(http.Response)
+	resp.StatusCode = http.StatusGatewayTimeout
+	msg := fmt.Sprintf("%s upstream timeout: %s", subdomain, u)
+	resp.Body = io.NopCloser(strings.NewReader(msg))
+	return resp
 }
