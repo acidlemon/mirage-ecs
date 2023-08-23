@@ -229,7 +229,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		handler.Transport = &Transport{
 			Transport: http.DefaultTransport,
 			Counter:   counter,
-			Timeout:   r.cfg.ProxyTimeout,
+			Timeout:   r.cfg.Network.ProxyTimeout,
 			Subdomain: subdomain,
 		}
 		ph.add(v.ListenPort, addr, handler)

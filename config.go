@@ -31,13 +31,13 @@ var DefaultParameter = &Parameter{
 }
 
 type Config struct {
-	Host         Host          `yaml:"host"`
-	Listen       Listen        `yaml:"listen"`
-	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
-	HtmlDir      string        `yaml:"htmldir"`
-	Parameter    Parameters    `yaml:"parameters"`
-	ECS          ECSCfg        `yaml:"ecs"`
-	Link         Link          `yaml:"link"`
+	Host      Host       `yaml:"host"`
+	Listen    Listen     `yaml:"listen"`
+	Network   Network    `yaml:"network"`
+	HtmlDir   string     `yaml:"htmldir"`
+	Parameter Parameters `yaml:"parameters"`
+	ECS       ECSCfg     `yaml:"ecs"`
+	Link      Link       `yaml:"link"`
 
 	localMode bool
 	awscfg    *aws.Config
@@ -186,7 +186,12 @@ type ConfigParams struct {
 	DefaultPort int
 }
 
+type Network struct {
+	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
+}
+
 const DefaultPort = 80
+const DefaultProxyTimeout = 300 * time.Second
 
 func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
@@ -208,6 +213,9 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 				{ListenPort: p.DefaultPort, TargetPort: p.DefaultPort},
 			},
 			HTTPS: nil,
+		},
+		Network: Network{
+			ProxyTimeout: DefaultProxyTimeout,
 		},
 		HtmlDir: "./html",
 		ECS: ECSCfg{
