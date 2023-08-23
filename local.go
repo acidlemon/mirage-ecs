@@ -121,10 +121,6 @@ func generateRandomHexID(length int) string {
 // run mock http server on ephemeral port at localhost, returns the port number and a function to stop the server
 func runMockServer(content string) (int, func()) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for i := 0; i < 15; i++ {
-			time.Sleep(time.Second)
-			log.Println("[info] mock server is sleeping", i)
-		}
 		fmt.Fprintln(w, content)
 	}))
 	log.Println("[info] mock server is running at", ts.URL)
