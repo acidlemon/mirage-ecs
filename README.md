@@ -230,7 +230,7 @@ parameters:
 
 `htmldir` section configures directory of mirage-ecs webapi template files.
 
-See [html/](html/) directory for default template files.
+See [html/](html/) directory for default template files. If you want to customize the web interface, copy the files to your directory and modify them.
 
 Required files are below.
 
@@ -240,6 +240,14 @@ html
 ├── layout.html
 └── list.html
 ```
+
+`htmldir` allows to specify a directory path or a S3 URL.
+
+```yaml
+htmldir: s3://example-bucket/html
+```
+
+When s3 URL is specified, mirage-ecs loads template files from the S3 bucket at startup.
 
 #### `ecs` section
 
