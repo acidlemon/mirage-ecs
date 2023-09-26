@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -260,6 +262,12 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		}
 	}
 
+	if strings.HasPrefix(cfg.HtmlDir, "s3://") {
+		if err := cfg.downloadHTMLFromS3(ctx, cfg.awscfg); err != nil {
+			return nil, err
+		}
+	}
+
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
@@ -387,4 +395,63 @@ func loadFromS3(ctx context.Context, awscfg *aws.Config, u string) ([]byte, erro
 	}
 	defer out.Body.Close()
 	return io.ReadAll(out.Body)
+}
+
+func (c *Config) downloadHTMLFromS3(ctx context.Context, awscfg *aws.Config) error {
+	log.Printf("[info] downloading html files from %s", c.HtmlDir)
+	tmpdir, err := os.MkdirTemp("", "mirage-ecs-html")
+	if err != nil {
+		return err
+	}
+	svc := s3.NewFromConfig(*awscfg)
+	parsed, err := url.Parse(c.HtmlDir)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "s3" {
+		return fmt.Errorf("invalid scheme: %s", parsed.Scheme)
+	}
+	bucket := parsed.Host
+	keyPrefix := strings.TrimPrefix(parsed.Path, "/")
+	res, err := svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:  aws.String(bucket),
+		Prefix:  aws.String(keyPrefix),
+		MaxKeys: 100, // sufficient for html template files
+	})
+	if err != nil {
+		return err
+	}
+	files := 0
+	for _, obj := range res.Contents {
+		log.Printf("[info] downloading %s", aws.ToString(obj.Key))
+		r, err := svc.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    obj.Key,
+		})
+		if err != nil {
+			return err
+		}
+		defer r.Body.Close()
+		filename := path.Base(aws.ToString(obj.Key))
+		file := filepath.Join(tmpdir, filename)
+		if size, err := copyToFile(r.Body, file); err != nil {
+			return err
+		} else {
+			files++
+			log.Printf("[info] downloaded %s (%d bytes)", file, size)
+		}
+	}
+	log.Printf("[info] downloaded %d files from %s", files, c.HtmlDir)
+	c.HtmlDir = tmpdir
+	log.Printf("[debug] setting html dir: %s", c.HtmlDir)
+	return nil
+}
+
+func copyToFile(src io.Reader, dst string) (int64, error) {
+	f, err := os.Create(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	return io.Copy(f, src)
 }
