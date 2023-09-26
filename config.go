@@ -38,6 +38,7 @@ type Config struct {
 	Parameter Parameters `yaml:"parameters"`
 	ECS       ECSCfg     `yaml:"ecs"`
 	Link      Link       `yaml:"link"`
+	Auth      *Auth      `yaml:"auth"`
 
 	localMode bool
 	awscfg    *aws.Config
