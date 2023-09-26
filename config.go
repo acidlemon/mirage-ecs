@@ -41,6 +41,7 @@ type Config struct {
 
 	localMode bool
 	awscfg    *aws.Config
+	cleanups  []func() error
 }
 
 type ECSCfg struct {
@@ -263,7 +264,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	}
 
 	if strings.HasPrefix(cfg.HtmlDir, "s3://") {
-		if err := cfg.downloadHTMLFromS3(ctx, cfg.awscfg); err != nil {
+		if err := cfg.downloadHTMLFromS3(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -275,6 +276,14 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		log.Printf("[warn] failed to fill ECS defaults: %s", err)
 	}
 	return cfg, nil
+}
+
+func (c *Config) Cleanup() {
+	for _, fn := range c.cleanups {
+		if err := fn(); err != nil {
+			log.Println("[warn] failed to cleanup", err)
+		}
+	}
 }
 
 func (c *Config) NewTaskRunner() TaskRunner {
@@ -397,13 +406,13 @@ func loadFromS3(ctx context.Context, awscfg *aws.Config, u string) ([]byte, erro
 	return io.ReadAll(out.Body)
 }
 
-func (c *Config) downloadHTMLFromS3(ctx context.Context, awscfg *aws.Config) error {
+func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
 	log.Printf("[info] downloading html files from %s", c.HtmlDir)
-	tmpdir, err := os.MkdirTemp("", "mirage-ecs-html")
+	tmpdir, err := os.MkdirTemp("", "mirage-ecs-htmldir-")
 	if err != nil {
 		return err
 	}
-	svc := s3.NewFromConfig(*awscfg)
+	svc := s3.NewFromConfig(*c.awscfg)
 	parsed, err := url.Parse(c.HtmlDir)
 	if err != nil {
 		return err
@@ -413,13 +422,21 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context, awscfg *aws.Config) err
 	}
 	bucket := parsed.Host
 	keyPrefix := strings.TrimPrefix(parsed.Path, "/")
+	if !strings.HasSuffix(keyPrefix, "/") {
+		keyPrefix += "/"
+	}
+	log.Println("[debug] bucket:", bucket, "keyPrefix:", keyPrefix)
 	res, err := svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket:  aws.String(bucket),
-		Prefix:  aws.String(keyPrefix),
-		MaxKeys: 100, // sufficient for html template files
+		Bucket:    aws.String(bucket),
+		Prefix:    aws.String(keyPrefix),
+		Delimiter: aws.String("/"),
+		MaxKeys:   100, // sufficient for html template files
 	})
 	if err != nil {
 		return err
+	}
+	if len(res.Contents) == 0 {
+		return fmt.Errorf("no objects found in %s", c.HtmlDir)
 	}
 	files := 0
 	for _, obj := range res.Contents {
@@ -443,6 +460,10 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context, awscfg *aws.Config) err
 	}
 	log.Printf("[info] downloaded %d files from %s", files, c.HtmlDir)
 	c.HtmlDir = tmpdir
+	c.cleanups = append(c.cleanups, func() error {
+		log.Printf("[info] removing %s", tmpdir)
+		return os.RemoveAll(tmpdir)
+	})
 	log.Printf("[debug] setting html dir: %s", c.HtmlDir)
 	return nil
 }
