@@ -4,7 +4,7 @@
   containerDefinitions: [
     {
       name: 'mirage-ecs',
-      image: 'ghcr.io/acidlemon/mirage-ecs:v0.7.2',
+      image: 'ghcr.io/acidlemon/mirage-ecs:v0.99.3',
       portMappings: [
         {
           containerPort: 80,
@@ -20,7 +20,15 @@
         },
         {
           name: 'MIRAGE_LOG_LEVEL',
-          value: 'debug',
+          value: 'info',
+        },
+        {
+          name: 'MIRAGE_CONF',
+          value: 's3://{{ tfstate `aws_s3_bucket.mirage-ecs.bucket` }}/config.yaml'
+        },
+        {
+          name: 'HTMLDIR',
+          value: 's3://{{ tfstate `aws_s3_bucket.mirage-ecs.bucket` }}/html'
         },
       ],
       logConfiguration: {
