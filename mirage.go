@@ -84,6 +84,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 		return err
 	default:
 	}
+	m.Config.Cleanup()
 	return nil
 }
 

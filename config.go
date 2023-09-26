@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -39,6 +41,7 @@ type Config struct {
 
 	localMode bool
 	awscfg    *aws.Config
+	cleanups  []func() error
 }
 
 type ECSCfg struct {
@@ -260,6 +263,12 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		}
 	}
 
+	if strings.HasPrefix(cfg.HtmlDir, "s3://") {
+		if err := cfg.downloadHTMLFromS3(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
@@ -267,6 +276,14 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		log.Printf("[warn] failed to fill ECS defaults: %s", err)
 	}
 	return cfg, nil
+}
+
+func (c *Config) Cleanup() {
+	for _, fn := range c.cleanups {
+		if err := fn(); err != nil {
+			log.Println("[warn] failed to cleanup", err)
+		}
+	}
 }
 
 func (c *Config) NewTaskRunner() TaskRunner {
@@ -387,4 +404,75 @@ func loadFromS3(ctx context.Context, awscfg *aws.Config, u string) ([]byte, erro
 	}
 	defer out.Body.Close()
 	return io.ReadAll(out.Body)
+}
+
+func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
+	log.Printf("[info] downloading html files from %s", c.HtmlDir)
+	tmpdir, err := os.MkdirTemp("", "mirage-ecs-htmldir-")
+	if err != nil {
+		return err
+	}
+	svc := s3.NewFromConfig(*c.awscfg)
+	parsed, err := url.Parse(c.HtmlDir)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "s3" {
+		return fmt.Errorf("invalid scheme: %s", parsed.Scheme)
+	}
+	bucket := parsed.Host
+	keyPrefix := strings.TrimPrefix(parsed.Path, "/")
+	if !strings.HasSuffix(keyPrefix, "/") {
+		keyPrefix += "/"
+	}
+	log.Println("[debug] bucket:", bucket, "keyPrefix:", keyPrefix)
+	res, err := svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:    aws.String(bucket),
+		Prefix:    aws.String(keyPrefix),
+		Delimiter: aws.String("/"),
+		MaxKeys:   100, // sufficient for html template files
+	})
+	if err != nil {
+		return err
+	}
+	if len(res.Contents) == 0 {
+		return fmt.Errorf("no objects found in %s", c.HtmlDir)
+	}
+	files := 0
+	for _, obj := range res.Contents {
+		log.Printf("[info] downloading %s", aws.ToString(obj.Key))
+		r, err := svc.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    obj.Key,
+		})
+		if err != nil {
+			return err
+		}
+		defer r.Body.Close()
+		filename := path.Base(aws.ToString(obj.Key))
+		file := filepath.Join(tmpdir, filename)
+		if size, err := copyToFile(r.Body, file); err != nil {
+			return err
+		} else {
+			files++
+			log.Printf("[info] downloaded %s (%d bytes)", file, size)
+		}
+	}
+	log.Printf("[info] downloaded %d files from %s", files, c.HtmlDir)
+	c.HtmlDir = tmpdir
+	c.cleanups = append(c.cleanups, func() error {
+		log.Printf("[info] removing %s", tmpdir)
+		return os.RemoveAll(tmpdir)
+	})
+	log.Printf("[debug] setting html dir: %s", c.HtmlDir)
+	return nil
+}
+
+func copyToFile(src io.Reader, dst string) (int64, error) {
+	f, err := os.Create(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	return io.Copy(f, src)
 }

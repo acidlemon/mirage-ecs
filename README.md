@@ -42,6 +42,8 @@ Requirements:
   - `logs:GetLogEvents`
   - `route53:GetHostedZone` (optional for mirage link)
   - `route53:ChangeResourceRecordSets` (optional for mirage link)
+  - `s3:GetObject` (optional for loading config/html files from S3)
+  - `s3:ListBucket` (optional for loading html files from S3)
 
   See also [terraform/iam.tf](terraform/iam.tf).
 
@@ -230,7 +232,7 @@ parameters:
 
 `htmldir` section configures directory of mirage-ecs webapi template files.
 
-See [html/](html/) directory for default template files.
+See [html/](html/) directory for default template files. If you want to customize the web interface, copy the files to your directory and modify them.
 
 Required files are below.
 
@@ -240,6 +242,14 @@ html
 ├── layout.html
 └── list.html
 ```
+
+`htmldir` allows to specify a directory path or a S3 URL.
+
+```yaml
+htmldir: s3://example-bucket/html/
+```
+
+When a s3 URL is specified, mirage-ecs loads template files from the S3 bucket at startup.
 
 #### `ecs` section
 
