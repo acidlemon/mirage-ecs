@@ -1,0 +1,11 @@
+parameters:
+  - name: additional
+    env: ADDITIONAL
+    default: "foo"
+    description: "Additional parameter"
+    options:
+      - label: "Foo"
+        value: "foo"
+      - label: "Bar"
+        value: "bar"
+htmldir: "{{ must_env `HTMLDIR` }}"

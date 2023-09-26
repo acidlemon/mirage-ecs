@@ -37,7 +37,25 @@ resource "aws_iam_policy" "mirage-ecs" {
         ]
         Effect   = "Allow"
         Resource = "*"
-      }
+      },
+      {
+        Action = [
+          "s3:GetObject",
+        ],
+        Effect   = "Allow",
+        Resource = [
+          "${aws_s3_bucket.mirage-ecs.arn}/*",
+        ]
+      },
+      {
+        Action = [
+          "s3:ListBucket",
+        ],
+        Effect   = "Allow",
+        Resource = [
+          "${aws_s3_bucket.mirage-ecs.arn}",
+        ]
+      },
     ]
   })
 }
