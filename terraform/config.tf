@@ -29,3 +29,19 @@ data "aws_caller_identity" "current" {
 variable "domain" {
   type = string
 }
+
+variable "oauth_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "oauth_client_secret" {
+  type    = string
+  default = ""
+}
+
+provider "http" {}
+
+data "http" "oidc_configuration" {
+  url = "https://accounts.google.com/.well-known/openid-configuration"
+}

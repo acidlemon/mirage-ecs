@@ -26,6 +26,17 @@ You should delegate `dev.your.example.com` to the name servers from `your.exampl
 
 After deploying, you can access to `https://mirage.dev.your.example.com` and see the mirage-ecs.
 
+#### Customization
+
+You can customize the deployment by editing `terraform.tfvars` and `ecspresso.yml`.
+
+`oauth_client_id` and `oauth_client_secret` are used for authentication by ALB with Google OAuth.
+If you want to enable authentication, you should set them.
+Set the Google OAuth callback URL to `https://mirage.{var.domain}/oauth2/idresponse`.
+
+`ecspresso.yml` is used for ECS deployment.
+See [ecspresso](https://github.com/kayac/ecspresso) for details.
+
 ### Cleanup
 
 ```console

@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	metadata "github.com/brunoscheufler/aws-ecs-metadata-go"
 	config "github.com/kayac/go-config"
+	"github.com/labstack/echo/v4"
 )
 
 var DefaultParameter = &Parameter{
@@ -38,6 +39,7 @@ type Config struct {
 	Parameter Parameters `yaml:"parameters"`
 	ECS       ECSCfg     `yaml:"ecs"`
 	Link      Link       `yaml:"link"`
+	Auth      *Auth      `yaml:"auth"`
 
 	localMode bool
 	awscfg    *aws.Config
@@ -373,6 +375,21 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ok, err := cfg.Auth.Do(c.Request(), c.Response())
+		if err != nil {
+			log.Println("[error] auth error:", err)
+			return echo.ErrInternalServerError
+		}
+		if !ok {
+			log.Println("[warn] auth failed")
+			return echo.ErrUnauthorized
+		}
+		return next(c)
+	}
 }
 
 func loadFromFile(p string) ([]byte, error) {

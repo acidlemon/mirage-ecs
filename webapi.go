@@ -55,6 +55,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	app.cfg = cfg
 
 	e := echo.New()
+	e.Use(cfg.AuthMiddleware)
 	e.GET("/", app.List)
 	e.GET("/launcher", app.Launcher)
 	e.POST("/launch", app.Launch)

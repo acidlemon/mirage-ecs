@@ -4,7 +4,7 @@
   containerDefinitions: [
     {
       name: 'mirage-ecs',
-      image: 'ghcr.io/acidlemon/mirage-ecs:v0.99.3',
+      image: 'ghcr.io/acidlemon/mirage-ecs:{{ env `VERSION` `v1.0.0` }}',
       portMappings: [
         {
           containerPort: 80,
@@ -20,7 +20,7 @@
         },
         {
           name: 'MIRAGE_LOG_LEVEL',
-          value: 'info',
+          value: '{{ env `LOG_LEVEL` `info` }}',
         },
         {
           name: 'MIRAGE_CONF',
