@@ -126,6 +126,15 @@ parameters:
     env: GIT_BRANCH
     rule: ""
     required: true
+auth:
+  token:
+    header: x-mirage-token
+    token: "{{ env `MIRAGE_TOKEN` }}"
+  amzn_oidc:
+    claim: email
+    matcher:
+      - suffix: "@example.com"
+      - exact: "foo@example.net"
 ```
 
 #### `host` section
@@ -298,6 +307,72 @@ link:
 ```
 
 See "mirage link" section for details.
+
+
+#### `auth` section
+
+`auth` section configures authentication. This section is optional.
+
+mirage-ecs supports token authentication, basic authentication and Amazon OIDC authentication by Application Load Balancer. You can use multiple authentication methods at the same time.
+
+If you configure multiple authentication methods, mirage-ecs checks the methods in order token, Amazon OIDC, and basic.  When some method succeeds, mirage-ecs allows access.
+
+```yaml
+auth:
+  token:
+    header: x-mirage-token
+    token: "{{ env `MIRAGE_TOKEN` }}"
+  amzn_oidc:
+    claim: email
+    matcher:
+      - suffix: "@example.com"
+      - exact: "foo@example.net"
+  basic:
+    username: mirage
+    password: "{{ env `MIRAGE_PASSWORD` }}"
+```
+
+##### `token` section
+
+`token` section configures token authentication. The token is passed by specfied HTTP header.
+
+```yaml
+auth:
+  token:
+    header: x-mirage-token
+    token: foobarbaz
+```
+
+This configuration requires `x-mirage-token: foobarbaz` HTTP header to access mirage-ecs.
+
+##### `basic` section
+
+`basic` section configures HTTP Basic authentication.
+
+```yaml
+auth:
+  basic:
+    username: mirage
+    password: foobarbaz
+```
+
+This configuration requires username and password to access mirage-ecs by Basic authentication.
+
+##### `amzn_oidc` section
+
+`amzn_oidc` section configures OIDC authentication by Application Load Balancer. See also [Authenticate users using an Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-authenticate-users.html)
+
+```yaml
+auth:
+  amzn_oidc:
+    claim: email
+    matcher:
+      - suffix: "@example.com"
+      - exact: "foo@example.net"
+```
+
+When ALB passes an OIDC token, mirage-ecs validates the token and checks the claim value. If the claim value matches any matchers, mirage-ecs allows access.
+
 
 ## mirage link
 
