@@ -120,6 +120,8 @@ listen:
   http:
     - listen: 80
       target: 80
+network:
+  proxy_timeout: 0
 htmldir: ./html
 parameters:
   - name: branch
@@ -157,6 +159,17 @@ listen:
     - listen: 80 # port number of mirage-ecs webapi
       target: 80 # port number of target ECS task
 ```
+
+#### `network` section
+
+`network` section configures network settings of mirage-ecs reverse proxy.
+
+```yaml
+network:
+  proxy_timeout: 30s # timeout of reverse proxy
+```
+
+`proxy_timeout` default is 0 (means no timeout). If `proxy_timeout` is not 0, mirage-ecs timeouts the request to backends after the specified duration and returns HTTP status 504 (Gateway Timeout).
 
 #### `parameters` section
 
