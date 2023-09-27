@@ -53,14 +53,18 @@ func (b *AuthMethodBasic) Match(h http.Header) bool {
 		return false
 	}
 	log.Println("[debug] auth basic", b.Username, b.Password)
-	if b.Username == "" || b.Password == "" {
+	if b.Username == "" || b.Password == "" || h.Get("Authorization") == "" {
 		return false
 	}
 	b.gen.Do(func() {
 		b.expected = "Basic " + base64.StdEncoding.EncodeToString([]byte(b.Username+":"+b.Password))
 	})
 	log.Println("[debug] auth basic comparing", b.Username, b.Password, h.Get("Authorization"))
-	return h.Get("Authorization") == b.expected
+	if h.Get("Authorization") == b.expected {
+		return true
+	}
+	log.Printf("[warn] auth basic failed")
+	return false
 }
 
 type AuthMethodToken struct {
@@ -72,11 +76,16 @@ func (b *AuthMethodToken) Match(h http.Header) bool {
 	if b == nil {
 		return false
 	}
-	if b.Token == "" {
+	sent := h.Get(b.Header)
+	if b.Token == "" || sent == "" {
 		return false
 	}
-	log.Println("[debug] auth token comparing", b.Header, b.Token, h.Get(b.Header))
-	return h.Get(b.Header) == b.Token
+	log.Println("[debug] auth token comparing", b.Header, b.Token, sent)
+	if b.Token == sent {
+		return true
+	}
+	log.Printf("[warn] auth token (header=%s) does not match", b.Header)
+	return false
 }
 
 type AuthMethodAmznOIDC struct {
@@ -100,21 +109,22 @@ func (a *AuthMethodAmznOIDC) Match(h http.Header) (bool, error) {
 }
 
 func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]interface{}) bool {
-	for _, m := range a.Matchers {
-		log.Printf("[debug] auth amzn_oidc matching %#v", *m)
-		v, ok := claims[a.Claim]
-		if !ok {
-			log.Printf("[warn] auth amzn_oidc claim[%s] not found in claims", a.Claim)
-			return false
-		}
-		switch v := v.(type) {
-		case string:
-			return m.Match(v)
-		default:
-			log.Printf("[warn] auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v)
-			return false
-		}
+	v, ok := claims[a.Claim]
+	if !ok {
+		log.Printf("[warn] auth amzn_oidc claim[%s] not found in claims", a.Claim)
+		return false
 	}
+	if vs, ok := v.(string); ok {
+		for _, m := range a.Matchers {
+			if m.Match(vs) {
+				return true
+			}
+		}
+	} else {
+		log.Printf("[warn] auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v)
+		return false
+	}
+	log.Printf("[warn] auth amzn_oidc claim[%s]=%s does not match any matchers", a.Claim, v)
 	return false
 }
 

@@ -224,7 +224,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 					"email": "user@example.net",
 				},
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "Claim matches any exact",
@@ -244,7 +244,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 					"email": "bar@example.net",
 				},
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "Claim match both",
