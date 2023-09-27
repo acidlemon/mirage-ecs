@@ -119,7 +119,7 @@ listen:
     - listen: 80
       target: 80
 network:
-  proxy_timeout: 300s
+  proxy_timeout: 0
 htmldir: ./html
 parameters:
   - name: branch
@@ -158,7 +158,7 @@ network:
   proxy_timeout: 30s # timeout of reverse proxy
 ```
 
-`proxy_timeout` default is 300s(5min). If `proxy_timeout` is 0, mirage-ecs does not set timeout to reverse proxy.
+`proxy_timeout` default is 0 (means no timeout). If `proxy_timeout` is not 0, mirage-ecs timeouts the request to backends after the specified duration and returns HTTP status 504 (Gateway Timeout).
 
 #### `parameters` section
 

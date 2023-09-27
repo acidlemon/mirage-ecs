@@ -191,7 +191,7 @@ type Network struct {
 }
 
 const DefaultPort = 80
-const DefaultProxyTimeout = 300 * time.Second
+const DefaultProxyTimeout = 0
 
 func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
