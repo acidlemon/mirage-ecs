@@ -61,6 +61,7 @@ func (b *AuthMethodBasic) Match(h http.Header) bool {
 	})
 	log.Println("[debug] auth basic comparing", b.Username, b.Password, h.Get("Authorization"))
 	if h.Get("Authorization") == b.expected {
+		log.Println("[debug] auth basic succeeded")
 		return true
 	}
 	log.Printf("[warn] auth basic failed")
@@ -82,6 +83,7 @@ func (b *AuthMethodToken) Match(h http.Header) bool {
 	}
 	log.Println("[debug] auth token comparing", b.Header, b.Token, sent)
 	if b.Token == sent {
+		log.Println("[debug] auth token succeeded")
 		return true
 	}
 	log.Printf("[warn] auth token (header=%s) does not match", b.Header)
@@ -114,17 +116,19 @@ func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]interface{}) bool {
 		log.Printf("[warn] auth amzn_oidc claim[%s] not found in claims", a.Claim)
 		return false
 	}
-	if vs, ok := v.(string); ok {
-		for _, m := range a.Matchers {
-			if m.Match(vs) {
-				return true
-			}
-		}
-	} else {
+	vs, ok := v.(string)
+	if !ok {
 		log.Printf("[warn] auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v)
 		return false
 	}
-	log.Printf("[warn] auth amzn_oidc claim[%s]=%s does not match any matchers", a.Claim, v)
+	for _, m := range a.Matchers {
+		if m.Match(vs) {
+			log.Printf("[debug] auth amzn_oidc claim[%s]=%s matches %#v", a.Claim, v, m)
+			return true
+		}
+		log.Printf("[debug] auth amzn_oidc claim[%s]=%s does not match %#v", a.Claim, v, m)
+	}
+	log.Printf("[warn] auth amzn_oidc claim[%s]=%s does not match any matchers", a.Claim, vs)
 	return false
 }
 
