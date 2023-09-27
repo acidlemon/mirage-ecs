@@ -2,13 +2,13 @@ package mirageecs
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 
 	"github.com/fujiwara/go-amzn-oidc/validator"
-	"github.com/labstack/echo/v4"
 )
 
 type Auth struct {
@@ -22,29 +22,20 @@ func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
 		// no auth
 		return true, nil
 	}
-	if a.Token != nil {
-		log.Println("[debug] auth token")
-		if ok := a.Token.Match(req.Header); ok {
-			return ok, nil
-		}
+	if ok := a.Token.Match(req.Header); ok {
+		return ok, nil
 	}
-	if a.AmznOIDC != nil {
-		log.Println("[debug] auth amzn_oidc")
-		if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
-			return false, err
-		} else if ok {
-			return true, nil
-		}
+	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
+		return false, err
+	} else if ok {
+		return true, nil
 	}
 	// basic auth is evaluated at last
 	// because www-authenticate header is set if auth failed.
-	if a.Basic != nil {
-		log.Println("[debug] auth basic")
-		if ok := a.Basic.Match(req.Header); ok {
-			return ok, nil
-		} else {
-			res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
-		}
+	if ok := a.Basic.Match(req.Header); ok {
+		return ok, nil
+	} else {
+		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
 	}
 	return false, nil
 }
@@ -58,6 +49,10 @@ type AuthMethodBasic struct {
 }
 
 func (b *AuthMethodBasic) Match(h http.Header) bool {
+	if b == nil {
+		return false
+	}
+	log.Println("[debug] auth basic", b.Username, b.Password)
 	if b.Username == "" || b.Password == "" {
 		return false
 	}
@@ -74,6 +69,9 @@ type AuthMethodToken struct {
 }
 
 func (b *AuthMethodToken) Match(h http.Header) bool {
+	if b == nil {
+		return false
+	}
 	if b.Token == "" {
 		return false
 	}
@@ -87,45 +85,37 @@ type AuthMethodAmznOIDC struct {
 }
 
 func (a *AuthMethodAmznOIDC) Match(h http.Header) (bool, error) {
+	if a == nil {
+		return false, nil
+	}
 	if a.Claim == "" {
 		return false, nil
 	}
 	log.Printf("[debug] auth amzn_oidc comparing %s with %s", a.Claim, h.Get("x-amzn-oidc-data"))
 	claims, err := validator.Validate(h.Get("x-amzn-oidc-data"))
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to validate x-amzn-oidc-data: %s", err)
 	}
+	return a.MatchClaims(claims), nil
+}
+
+func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]interface{}) bool {
 	for _, m := range a.Matchers {
-		log.Printf("[debug] auth amzn_oidc matching %s", *m)
+		log.Printf("[debug] auth amzn_oidc matching %#v", *m)
 		v, ok := claims[a.Claim]
 		if !ok {
 			log.Printf("[warn] auth amzn_oidc claim[%s] not found in claims", a.Claim)
-			return false, nil
+			return false
 		}
 		switch v := v.(type) {
 		case string:
-			return m.Match(v), nil
+			return m.Match(v)
 		default:
 			log.Printf("[warn] auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v)
-			return false, nil
+			return false
 		}
 	}
-	return false, nil
-}
-
-func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		ok, err := cfg.Auth.Do(c.Request(), c.Response())
-		if err != nil {
-			log.Println("[error] auth error:", err)
-			return echo.ErrInternalServerError
-		}
-		if !ok {
-			log.Println("[warn] auth failed")
-			return echo.ErrUnauthorized
-		}
-		return next(c)
-	}
+	return false
 }
 
 type ClaimMatcher struct {
