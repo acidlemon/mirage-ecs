@@ -9,3 +9,8 @@ parameters:
       - label: "Bar"
         value: "bar"
 htmldir: "{{ must_env `HTMLDIR` }}"
+#auth:
+#  amzn_oidc:
+#    claim: email
+#    matchers:
+#      - suffix: "@gmail.com"
