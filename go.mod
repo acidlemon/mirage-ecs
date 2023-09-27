@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.28.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.37.0
 	github.com/brunoscheufler/aws-ecs-metadata-go v0.0.0-20221221133751-67e37ae746cd
-	github.com/fujiwara/go-amzn-oidc v0.0.6
+	github.com/fujiwara/go-amzn-oidc v0.0.7
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/logutils v1.0.0
 	github.com/kayac/go-config v0.7.0
@@ -45,7 +45,6 @@ require (
 	github.com/labstack/gommon v0.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/shogo82148/go-retry v1.0.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
