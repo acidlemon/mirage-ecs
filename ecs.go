@@ -75,7 +75,7 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 			Value: aws.String(encodeTagValue(subdomain)),
 		},
 		types.KeyValuePair{
-			Name:  aws.String(TagSubdomainRaw),
+			Name:  aws.String(strings.ToUpper(TagSubdomainRaw)),
 			Value: aws.String(subdomain),
 		},
 	)
