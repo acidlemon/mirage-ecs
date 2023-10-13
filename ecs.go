@@ -124,6 +124,7 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[string]string {
 	env := make(map[string]string, len(p)+1)
 	env[strings.ToUpper(TagSubdomain)] = encodeTagValue(subdomain)
+	env[strings.ToUpper(TagSubdomainRaw)] = subdomain
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
