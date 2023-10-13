@@ -36,19 +36,22 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			subdomain: "testsubdomain",
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
+				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
 				{Name: aws.String("ENV1"), Value: aws.String("Value1")},
 				{Name: aws.String("ENV2"), Value: aws.String("Value2")},
 			},
 			expectedTags: []types.Tag{
 				{Key: aws.String("Subdomain"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
+				{Key: aws.String("SubdomainRaw"), Value: aws.String("testsubdomain")},
 				{Key: aws.String("ManagedBy"), Value: aws.String(mirageecs.TagValueMirage)},
 				{Key: aws.String("Param1"), Value: aws.String("Value1")},
 				{Key: aws.String("Param2"), Value: aws.String("Value2")},
 			},
 			expectedEnv: map[string]string{
-				"SUBDOMAIN": "dGVzdHN1YmRvbWFpbg==",
-				"ENV1":      "Value1",
-				"ENV2":      "Value2",
+				"SUBDOMAIN":    "dGVzdHN1YmRvbWFpbg==",
+				"SUBDOMAINRAW": "testsubdomain",
+				"ENV1":         "Value1",
+				"ENV2":         "Value2",
 			},
 		},
 	}

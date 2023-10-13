@@ -68,11 +68,17 @@ func (info Information) ShouldBePurged(duration time.Duration, excludesMap map[s
 type TaskParameter map[string]string
 
 func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters) []types.KeyValuePair {
-	kvp := make([]types.KeyValuePair, 0, len(p)+1)
-	kvp = append(kvp, types.KeyValuePair{
-		Name:  aws.String(strings.ToUpper(TagSubdomain)),
-		Value: aws.String(encodeTagValue(subdomain)),
-	})
+	kvp := make([]types.KeyValuePair, 0, len(p)+2)
+	kvp = append(kvp,
+		types.KeyValuePair{
+			Name:  aws.String(strings.ToUpper(TagSubdomain)),
+			Value: aws.String(encodeTagValue(subdomain)),
+		},
+		types.KeyValuePair{
+			Name:  aws.String(strings.ToUpper(TagSubdomainRaw)),
+			Value: aws.String(subdomain),
+		},
+	)
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -87,11 +93,15 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 }
 
 func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []types.Tag {
-	tags := make([]types.Tag, 0, len(p)+2)
+	tags := make([]types.Tag, 0, len(p)+3)
 	tags = append(tags,
 		types.Tag{
 			Key:   aws.String(TagSubdomain),
 			Value: aws.String(encodeTagValue(subdomain)),
+		},
+		types.Tag{
+			Key:   aws.String(TagSubdomainRaw),
+			Value: aws.String(subdomain),
 		},
 		types.Tag{
 			Key:   aws.String(TagManagedBy),
@@ -114,6 +124,7 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[string]string {
 	env := make(map[string]string, len(p)+1)
 	env[strings.ToUpper(TagSubdomain)] = encodeTagValue(subdomain)
+	env[strings.ToUpper(TagSubdomainRaw)] = subdomain
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -125,9 +136,10 @@ func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[stri
 }
 
 const (
-	TagManagedBy   = "ManagedBy"
-	TagSubdomain   = "Subdomain"
-	TagValueMirage = "Mirage"
+	TagManagedBy    = "ManagedBy"
+	TagSubdomain    = "Subdomain"
+	TagSubdomainRaw = "SubdomainRaw"
+	TagValueMirage  = "Mirage"
 
 	statusRunning = string(types.DesiredStatusRunning)
 	statusStopped = string(types.DesiredStatusStopped)
