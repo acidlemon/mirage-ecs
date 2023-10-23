@@ -42,7 +42,6 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			},
 			expectedTags: []types.Tag{
 				{Key: aws.String("Subdomain"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
-				{Key: aws.String("SubdomainRaw"), Value: aws.String("testsubdomain")},
 				{Key: aws.String("ManagedBy"), Value: aws.String(mirageecs.TagValueMirage)},
 				{Key: aws.String("Param1"), Value: aws.String("Value1")},
 				{Key: aws.String("Param2"), Value: aws.String("Value2")},
