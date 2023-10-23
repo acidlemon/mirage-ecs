@@ -324,7 +324,9 @@ See "mirage link" section for details.
 
 #### `auth` section
 
-`auth` section configures authentication. This section is optional.
+`auth` section configures authentication to restrict access to webapi. The access via reverse proxy is not restricted by auth methods.
+
+This section is optional.
 
 mirage-ecs supports token authentication, basic authentication and Amazon OIDC authentication by Application Load Balancer. You can use multiple authentication methods at the same time.
 
