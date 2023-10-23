@@ -227,10 +227,11 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		}
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
 		handler.Transport = &Transport{
-			Transport: http.DefaultTransport,
-			Counter:   counter,
-			Timeout:   r.cfg.Network.ProxyTimeout,
-			Subdomain: subdomain,
+			Transport:         http.DefaultTransport,
+			Counter:           counter,
+			Timeout:           r.cfg.Network.ProxyTimeout,
+			Subdomain:         subdomain,
+			RequireAuthCookie: v.RequireAuthCookie,
 		}
 		ph.add(v.ListenPort, addr, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
@@ -280,14 +281,23 @@ func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 }
 
 type Transport struct {
-	Counter   *AccessCounter
-	Transport http.RoundTripper
-	Timeout   time.Duration
-	Subdomain string
+	Counter           *AccessCounter
+	Transport         http.RoundTripper
+	Timeout           time.Duration
+	Subdomain         string
+	RequireAuthCookie bool
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.Counter.Add()
+
+	if t.RequireAuthCookie {
+		cookie, err := req.Cookie(AuthCookieName)
+		if err != nil || cookie == nil || cookie.Value != "ok" {
+			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+			return newForbiddenResponse(), nil
+		}
+	}
 	if t.Timeout == 0 {
 		return t.Transport.RoundTrip(req)
 	}
@@ -311,5 +321,12 @@ func newTimeoutResponse(subdomain string, u string) *http.Response {
 	resp.StatusCode = http.StatusGatewayTimeout
 	msg := fmt.Sprintf("%s upstream timeout: %s", subdomain, u)
 	resp.Body = io.NopCloser(strings.NewReader(msg))
+	return resp
+}
+
+func newForbiddenResponse() *http.Response {
+	resp := new(http.Response)
+	resp.StatusCode = http.StatusForbidden
+	resp.Body = io.NopCloser(strings.NewReader("Forbidden"))
 	return resp
 }

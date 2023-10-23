@@ -162,8 +162,9 @@ type Listen struct {
 }
 
 type PortMap struct {
-	ListenPort int `yaml:"listen"`
-	TargetPort int `yaml:"target"`
+	ListenPort        int  `yaml:"listen"`
+	TargetPort        int  `yaml:"target"`
+	RequireAuthCookie bool `yaml:"require_auth_cookie"`
 }
 
 type Parameter struct {
@@ -197,6 +198,7 @@ type Network struct {
 
 const DefaultPort = 80
 const DefaultProxyTimeout = 0
+const AuthCookieName = "mirage-ecs-auth"
 
 func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
@@ -387,12 +389,26 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 	return nil
 }
 
+func (cfg *Config) newCookie() (*http.Cookie, error) {
+	return &http.Cookie{
+		Name:    AuthCookieName,
+		Value:   "ok", // TODO jwt
+		Expires: time.Now().Add(24 * time.Hour),
+		Domain:  cfg.Host.ReverseProxySuffix,
+		// Secure:  true,
+	}, nil
+}
+
 func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ok, err := cfg.Auth.Do(c.Request(), c.Response())
 		if err != nil {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
+		}
+		if cfg.Auth == nil || ok {
+			cookie, _ := cfg.newCookie()
+			c.SetCookie(cookie)
 		}
 		if !ok {
 			log.Println("[warn] auth failed")

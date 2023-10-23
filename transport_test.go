@@ -13,11 +13,13 @@ import (
 
 func TestRoundTrip(t *testing.T) {
 	tests := []struct {
-		name        string
-		serverDelay time.Duration
-		timeout     time.Duration
-		wantStatus  int
-		wantBody    string
+		name              string
+		serverDelay       time.Duration
+		timeout           time.Duration
+		wantStatus        int
+		wantBody          string
+		requireAuthCookie bool
+		sendCookie        bool
 	}{
 		{
 			name:        "Success pattern",
@@ -33,6 +35,22 @@ func TestRoundTrip(t *testing.T) {
 			wantStatus:  http.StatusGatewayTimeout,
 			wantBody:    "test-subdomain upstream timeout: ",
 		},
+		{
+			name:              "Success pattern with auth cookie",
+			timeout:           100 * time.Millisecond,
+			wantStatus:        http.StatusOK,
+			wantBody:          "OK",
+			requireAuthCookie: true,
+			sendCookie:        true,
+		},
+		{
+			name:              "Forbidden pattern with auth cookie",
+			timeout:           100 * time.Millisecond,
+			wantStatus:        http.StatusForbidden,
+			wantBody:          "Forbidden",
+			requireAuthCookie: true,
+			sendCookie:        false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -46,13 +64,20 @@ func TestRoundTrip(t *testing.T) {
 
 			// Setup transport
 			tr := &mirageecs.Transport{
-				Counter:   mirageecs.NewAccessCounter(time.Second),
-				Transport: http.DefaultTransport,
-				Timeout:   tt.timeout,
-				Subdomain: "test-subdomain",
+				Counter:           mirageecs.NewAccessCounter(time.Second),
+				Transport:         http.DefaultTransport,
+				Timeout:           tt.timeout,
+				Subdomain:         "test-subdomain",
+				RequireAuthCookie: tt.requireAuthCookie,
 			}
 
 			req, _ := http.NewRequest("GET", server.URL, nil)
+			if tt.sendCookie {
+				req.AddCookie(&http.Cookie{
+					Name:  "mirage-ecs-auth",
+					Value: "ok",
+				})
+			}
 
 			resp, err := tr.RoundTrip(req)
 			if err != nil {

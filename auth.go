@@ -12,9 +12,10 @@ import (
 )
 
 type Auth struct {
-	Basic    *AuthMethodBasic    `yaml:"basic"`
-	Token    *AuthMethodToken    `yaml:"token"`
-	AmznOIDC *AuthMethodAmznOIDC `yaml:"amzn_oidc"`
+	Basic        *AuthMethodBasic    `yaml:"basic"`
+	Token        *AuthMethodToken    `yaml:"token"`
+	AmznOIDC     *AuthMethodAmznOIDC `yaml:"amzn_oidc"`
+	CookieSecret string              `yaml:"cookie_secret"`
 }
 
 func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
