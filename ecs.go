@@ -71,11 +71,11 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 	kvp := make([]types.KeyValuePair, 0, len(p)+2)
 	kvp = append(kvp,
 		types.KeyValuePair{
-			Name:  aws.String(strings.ToUpper(TagSubdomain)),
+			Name:  aws.String(EnvSubdomain),
 			Value: aws.String(encodeTagValue(subdomain)),
 		},
 		types.KeyValuePair{
-			Name:  aws.String(strings.ToUpper(TagSubdomainRaw)),
+			Name:  aws.String(EnvSubdomainRaw),
 			Value: aws.String(subdomain),
 		},
 	)
@@ -100,10 +100,6 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 			Value: aws.String(encodeTagValue(subdomain)),
 		},
 		types.Tag{
-			Key:   aws.String(TagSubdomainRaw),
-			Value: aws.String(subdomain),
-		},
-		types.Tag{
 			Key:   aws.String(TagManagedBy),
 			Value: aws.String(TagValueMirage),
 		},
@@ -123,8 +119,8 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 
 func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[string]string {
 	env := make(map[string]string, len(p)+1)
-	env[strings.ToUpper(TagSubdomain)] = encodeTagValue(subdomain)
-	env[strings.ToUpper(TagSubdomainRaw)] = subdomain
+	env[EnvSubdomain] = encodeTagValue(subdomain)
+	env[EnvSubdomainRaw] = subdomain
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -136,10 +132,12 @@ func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[stri
 }
 
 const (
-	TagManagedBy    = "ManagedBy"
-	TagSubdomain    = "Subdomain"
-	TagSubdomainRaw = "SubdomainRaw"
-	TagValueMirage  = "Mirage"
+	TagManagedBy   = "ManagedBy"
+	TagSubdomain   = "Subdomain"
+	TagValueMirage = "Mirage"
+
+	EnvSubdomain    = "SUBDOMAIN"
+	EnvSubdomainRaw = "SUBDOMAINRAW"
 
 	statusRunning = string(types.DesiredStatusRunning)
 	statusStopped = string(types.DesiredStatusStopped)
