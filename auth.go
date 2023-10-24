@@ -51,13 +51,7 @@ func (a *Auth) NewAuthCookie(expire time.Duration, domain string) (*http.Cookie,
 	expireAt := time.Now().Add(expire)
 
 	if a == nil || a.CookieSecret == "" {
-		return &http.Cookie{
-			Name:     AuthCookieName,
-			Value:    "nil",
-			Expires:  expireAt,
-			Domain:   domain,
-			HttpOnly: true,
-		}, nil
+		return &http.Cookie{}, nil
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{

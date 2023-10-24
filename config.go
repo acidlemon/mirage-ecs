@@ -404,7 +404,9 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			log.Println("[error] failed to create auth cookie:", err)
 			return echo.ErrInternalServerError
 		}
-		c.SetCookie(cookie)
+		if cookie.Value != "" {
+			c.SetCookie(cookie)
+		}
 
 		if !ok {
 			log.Println("[warn] auth failed")
