@@ -1,8 +1,10 @@
-package mirageecs
+package mirageecs_test
 
 import (
 	"net/http"
 	"testing"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestAuthMethodToken_Match(t *testing.T) {
@@ -96,12 +98,12 @@ func TestAuthMethodToken_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &AuthMethodToken{
+			b := &mirageecs.AuthMethodToken{
 				Token:  tt.fields.Token,
 				Header: tt.fields.Header,
 			}
 			if got := b.Match(tt.args.h); got != tt.want {
-				t.Errorf("AuthMethodToken.Match() = %v, want %v", got, tt.want)
+				t.Errorf("mirageecs.mirageecs.AuthMethodToken.Match() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -110,7 +112,7 @@ func TestAuthMethodToken_Match(t *testing.T) {
 func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 	type fields struct {
 		Claim    string
-		Matchers []*ClaimMatcher
+		Matchers []*mirageecs.ClaimMatcher
 	}
 	type args struct {
 		Claims map[string]any
@@ -125,7 +127,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -142,7 +144,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -159,7 +161,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim is empty",
 			fields: fields{
 				Claim: "",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -176,7 +178,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -193,7 +195,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -210,7 +212,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches any suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -230,7 +232,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches any exact",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "foo@example.com",
 					},
@@ -250,7 +252,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim match both",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -270,7 +272,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match both",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.net",
 					},
@@ -289,7 +291,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthMethodAmznOIDC{
+			a := &mirageecs.AuthMethodAmznOIDC{
 				Claim:    tt.fields.Claim,
 				Matchers: tt.fields.Matchers,
 			}
@@ -392,7 +394,7 @@ func TestAuthMethodBasic_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &AuthMethodBasic{
+			b := &mirageecs.AuthMethodBasic{
 				Username: tt.fields.Username,
 				Password: tt.fields.Password,
 			}
