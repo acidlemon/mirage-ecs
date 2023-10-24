@@ -29,6 +29,17 @@ func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
 		// no auth
 		return true, nil
 	}
+
+	if cookie, err := req.Cookie(AuthCookieName); err == nil {
+		if err := a.ValidateAuthCookie(cookie); err != nil {
+			log.Printf("[warn] auth cookie failed: %s", err)
+			// fallthrough
+		} else {
+			log.Println("[debug] auth cookie succeeded")
+			return true, nil
+		}
+	}
+
 	if ok := a.Token.Match(req.Header); ok {
 		return ok, nil
 	}
