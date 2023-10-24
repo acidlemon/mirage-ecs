@@ -399,7 +399,7 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.ErrInternalServerError
 		}
 		// set cookie if auth succeeded
-		cookie, err := cfg.Auth.newAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
+		cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
 		if err != nil {
 			log.Println("[error] failed to create auth cookie:", err)
 			return echo.ErrInternalServerError

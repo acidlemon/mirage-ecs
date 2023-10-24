@@ -71,11 +71,11 @@ func TestRoundTrip(t *testing.T) {
 				Subdomain: "test-subdomain",
 			}
 			if tt.requireAuthCookie {
-				tr.AuthCookieValueValidateFunc = func(v string) error {
-					if v == "ok" {
+				tr.AuthCookieValidateFunc = func(c *http.Cookie) error {
+					if c.Value == "ok" {
 						return nil
 					}
-					return fmt.Errorf("invalid cookie value: %s", v)
+					return fmt.Errorf("invalid cookie value: %s", c.Value)
 				}
 			}
 

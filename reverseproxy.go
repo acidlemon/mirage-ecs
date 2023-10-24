@@ -233,7 +233,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 			Subdomain: subdomain,
 		}
 		if v.RequireAuthCookie {
-			tp.AuthCookieValueValidateFunc = r.cfg.Auth.validateAuthCookieValue
+			tp.AuthCookieValidateFunc = r.cfg.Auth.ValidateAuthCookie
 		}
 		handler.Transport = tp
 		ph.add(v.ListenPort, addr, handler)
@@ -284,26 +284,25 @@ func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 }
 
 type Transport struct {
-	Counter                     *AccessCounter
-	Transport                   http.RoundTripper
-	Timeout                     time.Duration
-	Subdomain                   string
-	AuthCookieValueValidateFunc func(string) error
+	Counter                *AccessCounter
+	Transport              http.RoundTripper
+	Timeout                time.Duration
+	Subdomain              string
+	AuthCookieValidateFunc func(*http.Cookie) error
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.Counter.Add()
 
 	log.Printf("[debug] subdomain %s %s roundtrip", t.Subdomain, req.URL)
-	if t.AuthCookieValueValidateFunc != nil {
+	if t.AuthCookieValidateFunc != nil {
 		log.Printf("[debug] subdomain %s %s roundtrip: require auth cookie", t.Subdomain, req.URL)
 		cookie, err := req.Cookie(AuthCookieName)
 		if err != nil || cookie == nil {
 			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
 			return newForbiddenResponse(), nil
 		}
-		log.Println("[debug] Cookie value", cookie.Value)
-		if err := t.AuthCookieValueValidateFunc(cookie.Value); err != nil {
+		if err := t.AuthCookieValidateFunc(cookie); err != nil {
 			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
 			return newForbiddenResponse(), nil
 		}

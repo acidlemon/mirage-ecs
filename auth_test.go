@@ -3,6 +3,7 @@ package mirageecs_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	mirageecs "github.com/acidlemon/mirage-ecs"
 )
@@ -402,5 +403,49 @@ func TestAuthMethodBasic_Match(t *testing.T) {
 				t.Errorf("AuthMethodBasic.Match() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAuthCookie(t *testing.T) {
+	auth := mirageecs.Auth{
+		CookieSecret: "secret",
+	}
+	cookie, err := auth.NewAuthCookie(time.Second, ".example.com")
+	if err != nil {
+		t.Error(err)
+	}
+	if cookie.Name != "mirage-ecs-auth" {
+		t.Errorf("invalid cookie name: %s", cookie.Name)
+	}
+	if cookie.Value == "" {
+		t.Errorf("invalid cookie value: %s", cookie.Value)
+	}
+	if cookie.Domain != ".example.com" {
+		t.Errorf("invalid cookie domain: %s", cookie.Domain)
+	}
+	if cookie.HttpOnly != true {
+		t.Errorf("invalid cookie httponly: %v", cookie.HttpOnly)
+	}
+	if cookie.Expires.IsZero() {
+		t.Errorf("invalid cookie expires: %v", cookie.Expires)
+	}
+	if err := auth.ValidateAuthCookie(cookie); err != nil {
+		t.Error(err)
+	}
+
+	// invalid cookie
+	orig := cookie.Value
+	cookie.Value = cookie.Value + "xxx"
+	if err := auth.ValidateAuthCookie(cookie); err == nil {
+		t.Error("should be invalid")
+	}
+	// restore
+	cookie.Value = orig
+	t.Log(cookie.Value)
+
+	// expired
+	time.Sleep(2 * time.Second)
+	if err := auth.ValidateAuthCookie(cookie); err == nil {
+		t.Error("should be expired")
 	}
 }
