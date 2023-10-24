@@ -1,8 +1,11 @@
-package mirageecs
+package mirageecs_test
 
 import (
 	"net/http"
 	"testing"
+	"time"
+
+	mirageecs "github.com/acidlemon/mirage-ecs"
 )
 
 func TestAuthMethodToken_Match(t *testing.T) {
@@ -96,12 +99,12 @@ func TestAuthMethodToken_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &AuthMethodToken{
+			b := &mirageecs.AuthMethodToken{
 				Token:  tt.fields.Token,
 				Header: tt.fields.Header,
 			}
 			if got := b.Match(tt.args.h); got != tt.want {
-				t.Errorf("AuthMethodToken.Match() = %v, want %v", got, tt.want)
+				t.Errorf("mirageecs.mirageecs.AuthMethodToken.Match() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -110,7 +113,7 @@ func TestAuthMethodToken_Match(t *testing.T) {
 func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 	type fields struct {
 		Claim    string
-		Matchers []*ClaimMatcher
+		Matchers []*mirageecs.ClaimMatcher
 	}
 	type args struct {
 		Claims map[string]any
@@ -125,7 +128,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -142,7 +145,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -159,7 +162,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim is empty",
 			fields: fields{
 				Claim: "",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "user@example.com",
 					},
@@ -176,7 +179,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -193,7 +196,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -210,7 +213,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches any suffix",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -230,7 +233,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim matches any exact",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Exact: "foo@example.com",
 					},
@@ -250,7 +253,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim match both",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.com",
 					},
@@ -270,7 +273,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 			name: "Claim does not match both",
 			fields: fields{
 				Claim: "email",
-				Matchers: []*ClaimMatcher{
+				Matchers: []*mirageecs.ClaimMatcher{
 					{
 						Suffix: "@example.net",
 					},
@@ -289,7 +292,7 @@ func TestAuthMethodAmznOIDC_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthMethodAmznOIDC{
+			a := &mirageecs.AuthMethodAmznOIDC{
 				Claim:    tt.fields.Claim,
 				Matchers: tt.fields.Matchers,
 			}
@@ -392,7 +395,7 @@ func TestAuthMethodBasic_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &AuthMethodBasic{
+			b := &mirageecs.AuthMethodBasic{
 				Username: tt.fields.Username,
 				Password: tt.fields.Password,
 			}
@@ -400,5 +403,49 @@ func TestAuthMethodBasic_Match(t *testing.T) {
 				t.Errorf("AuthMethodBasic.Match() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAuthCookie(t *testing.T) {
+	auth := mirageecs.Auth{
+		CookieSecret: "secret",
+	}
+	cookie, err := auth.NewAuthCookie(time.Second, ".example.com")
+	if err != nil {
+		t.Error(err)
+	}
+	if cookie.Name != "mirage-ecs-auth" {
+		t.Errorf("invalid cookie name: %s", cookie.Name)
+	}
+	if cookie.Value == "" {
+		t.Errorf("invalid cookie value: %s", cookie.Value)
+	}
+	if cookie.Domain != ".example.com" {
+		t.Errorf("invalid cookie domain: %s", cookie.Domain)
+	}
+	if cookie.HttpOnly != true {
+		t.Errorf("invalid cookie httponly: %v", cookie.HttpOnly)
+	}
+	if cookie.Expires.IsZero() {
+		t.Errorf("invalid cookie expires: %v", cookie.Expires)
+	}
+	if err := auth.ValidateAuthCookie(cookie); err != nil {
+		t.Error(err)
+	}
+
+	// invalid cookie
+	orig := cookie.Value
+	cookie.Value = cookie.Value + "xxx"
+	if err := auth.ValidateAuthCookie(cookie); err == nil {
+		t.Error("should be invalid")
+	}
+	// restore
+	cookie.Value = orig
+	t.Log(cookie.Value)
+
+	// expired
+	time.Sleep(2 * time.Second)
+	if err := auth.ValidateAuthCookie(cookie); err == nil {
+		t.Error("should be expired")
 	}
 }

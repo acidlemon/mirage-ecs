@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,11 +14,13 @@ import (
 
 func TestRoundTrip(t *testing.T) {
 	tests := []struct {
-		name        string
-		serverDelay time.Duration
-		timeout     time.Duration
-		wantStatus  int
-		wantBody    string
+		name              string
+		serverDelay       time.Duration
+		timeout           time.Duration
+		wantStatus        int
+		wantBody          string
+		requireAuthCookie bool
+		sendCookie        bool
 	}{
 		{
 			name:        "Success pattern",
@@ -32,6 +35,22 @@ func TestRoundTrip(t *testing.T) {
 			timeout:     100 * time.Millisecond,
 			wantStatus:  http.StatusGatewayTimeout,
 			wantBody:    "test-subdomain upstream timeout: ",
+		},
+		{
+			name:              "Success pattern with auth cookie",
+			timeout:           100 * time.Millisecond,
+			wantStatus:        http.StatusOK,
+			wantBody:          "OK",
+			requireAuthCookie: true,
+			sendCookie:        true,
+		},
+		{
+			name:              "Forbidden pattern with auth cookie",
+			timeout:           100 * time.Millisecond,
+			wantStatus:        http.StatusForbidden,
+			wantBody:          "Forbidden",
+			requireAuthCookie: true,
+			sendCookie:        false,
 		},
 	}
 
@@ -51,8 +70,22 @@ func TestRoundTrip(t *testing.T) {
 				Timeout:   tt.timeout,
 				Subdomain: "test-subdomain",
 			}
+			if tt.requireAuthCookie {
+				tr.AuthCookieValidateFunc = func(c *http.Cookie) error {
+					if c.Value == "ok" {
+						return nil
+					}
+					return fmt.Errorf("invalid cookie value: %s", c.Value)
+				}
+			}
 
 			req, _ := http.NewRequest("GET", server.URL, nil)
+			if tt.sendCookie {
+				req.AddCookie(&http.Cookie{
+					Name:  "mirage-ecs-auth",
+					Value: "ok",
+				})
+			}
 
 			resp, err := tr.RoundTrip(req)
 			if err != nil {

@@ -158,6 +158,24 @@ listen:
   http:
     - listen: 80 # port number of mirage-ecs webapi
       target: 80 # port number of target ECS task
+      require_auth_cookie: true # require auth cookie to access to target ECS task
+```
+
+When `require_auth_cookie` is true, mirage-ecs requires a cookie to access to target ECS task. mirage-ecs sets a cookie to the browser if authorized by other authentication methods. The cookie is used to authenticate the request to target ECS task. See also `cookie_secret` section in `auth` configuration.
+
+When `require_auth_cookie` is false (default), mirage-ecs does not restrict access to target ECS task.
+
+This configuration allows to specify multiple ports. mirage-ecs listens to all ports and proxies to the target ECS task.
+
+```yaml
+listen:
+  http:
+    - listen: 3000
+      target: 3000
+      require_auth_cookie: true
+    - listen: 5000
+      target: 5000
+      require_auth_cookie: false
 ```
 
 #### `network` section
@@ -334,6 +352,7 @@ If you configure multiple authentication methods, mirage-ecs checks the methods 
 
 ```yaml
 auth:
+  cookie_secret: "{{ env `MIRAGE_COOKIE_SECRET` }}"
   token:
     header: x-mirage-token
     token: "{{ env `MIRAGE_TOKEN` }}"
@@ -346,6 +365,12 @@ auth:
     username: mirage
     password: "{{ env `MIRAGE_PASSWORD` }}"
 ```
+
+#### `cookie_secret` section
+
+`cookie_secret` section configures secret key for cookie authentication.
+
+When you configure `cookie_secret`, mirage-ecs sets a cookie to the browser after being authorized by other authentication methods. The cookie is used to authenticate the next request for webapi and reverse proxy to the target ECS tasks.
 
 ##### `token` section
 

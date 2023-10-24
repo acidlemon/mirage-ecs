@@ -162,8 +162,9 @@ type Listen struct {
 }
 
 type PortMap struct {
-	ListenPort int `yaml:"listen"`
-	TargetPort int `yaml:"target"`
+	ListenPort        int  `yaml:"listen"`
+	TargetPort        int  `yaml:"target"`
+	RequireAuthCookie bool `yaml:"require_auth_cookie"`
 }
 
 type Parameter struct {
@@ -197,6 +198,8 @@ type Network struct {
 
 const DefaultPort = 80
 const DefaultProxyTimeout = 0
+const AuthCookieName = "mirage-ecs-auth"
+const AuthCookieExpire = 24 * time.Hour
 
 func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
@@ -227,6 +230,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 			Region: os.Getenv("AWS_REGION"),
 		},
 		localMode: p.LocalMode,
+		Auth:      nil,
 	}
 
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
@@ -394,7 +398,17 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
 		}
-		if !ok {
+		// set cookie if auth succeeded
+		if ok {
+			cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
+			if err != nil {
+				log.Println("[error] failed to create auth cookie:", err)
+				return echo.ErrInternalServerError
+			}
+			if cookie.Value != "" {
+				c.SetCookie(cookie)
+			}
+		} else {
 			log.Println("[warn] auth failed")
 			return echo.ErrUnauthorized
 		}
