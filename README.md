@@ -370,7 +370,7 @@ auth:
 
 `cookie_secret` section configures secret key for cookie authentication.
 
-When you configure `cookie_secret`, mirage-ecs sets a cookie to the browser after authorized by other authentication methods. The cookie is used to authenticate the request to reverse proxies for the target ECS tasks.
+When you configure `cookie_secret`, mirage-ecs sets a cookie to the browser after being authorized by other authentication methods. The cookie is used to authenticate the next request for webapi and reverse proxy to the target ECS tasks.
 
 ##### `token` section
 
