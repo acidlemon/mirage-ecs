@@ -1,6 +1,7 @@
 package mirageecs_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -64,11 +65,18 @@ func TestRoundTrip(t *testing.T) {
 
 			// Setup transport
 			tr := &mirageecs.Transport{
-				Counter:           mirageecs.NewAccessCounter(time.Second),
-				Transport:         http.DefaultTransport,
-				Timeout:           tt.timeout,
-				Subdomain:         "test-subdomain",
-				RequireAuthCookie: tt.requireAuthCookie,
+				Counter:   mirageecs.NewAccessCounter(time.Second),
+				Transport: http.DefaultTransport,
+				Timeout:   tt.timeout,
+				Subdomain: "test-subdomain",
+			}
+			if tt.requireAuthCookie {
+				tr.AuthCookieValueValidateFunc = func(v string) error {
+					if v == "ok" {
+						return nil
+					}
+					return fmt.Errorf("invalid cookie value: %s", v)
+				}
 			}
 
 			req, _ := http.NewRequest("GET", server.URL, nil)

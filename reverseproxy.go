@@ -226,13 +226,16 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 			continue
 		}
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
-		handler.Transport = &Transport{
-			Transport:         http.DefaultTransport,
-			Counter:           counter,
-			Timeout:           r.cfg.Network.ProxyTimeout,
-			Subdomain:         subdomain,
-			RequireAuthCookie: v.RequireAuthCookie,
+		tp := &Transport{
+			Transport: http.DefaultTransport,
+			Counter:   counter,
+			Timeout:   r.cfg.Network.ProxyTimeout,
+			Subdomain: subdomain,
 		}
+		if v.RequireAuthCookie {
+			tp.AuthCookieValueValidateFunc = r.cfg.Auth.validateAuthCookieValue
+		}
+		handler.Transport = tp
 		ph.add(v.ListenPort, addr, handler)
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
 	}
@@ -281,19 +284,26 @@ func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 }
 
 type Transport struct {
-	Counter           *AccessCounter
-	Transport         http.RoundTripper
-	Timeout           time.Duration
-	Subdomain         string
-	RequireAuthCookie bool
+	Counter                     *AccessCounter
+	Transport                   http.RoundTripper
+	Timeout                     time.Duration
+	Subdomain                   string
+	AuthCookieValueValidateFunc func(string) error
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.Counter.Add()
 
-	if t.RequireAuthCookie {
+	log.Printf("[debug] subdomain %s %s roundtrip", t.Subdomain, req.URL)
+	if t.AuthCookieValueValidateFunc != nil {
+		log.Printf("[debug] subdomain %s %s roundtrip: require auth cookie", t.Subdomain, req.URL)
 		cookie, err := req.Cookie(AuthCookieName)
-		if err != nil || cookie == nil || cookie.Value != "ok" {
+		if err != nil || cookie == nil {
+			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+			return newForbiddenResponse(), nil
+		}
+		log.Println("[debug] Cookie value", cookie.Value)
+		if err := t.AuthCookieValueValidateFunc(cookie.Value); err != nil {
 			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
 			return newForbiddenResponse(), nil
 		}

@@ -199,6 +199,7 @@ type Network struct {
 const DefaultPort = 80
 const DefaultProxyTimeout = 0
 const AuthCookieName = "mirage-ecs-auth"
+const AuthCookieExpire = 24 * time.Hour
 
 func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	domain := p.Domain
@@ -229,6 +230,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 			Region: os.Getenv("AWS_REGION"),
 		},
 		localMode: p.LocalMode,
+		Auth:      nil,
 	}
 
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
@@ -389,16 +391,6 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 	return nil
 }
 
-func (cfg *Config) newCookie() (*http.Cookie, error) {
-	return &http.Cookie{
-		Name:    AuthCookieName,
-		Value:   "ok", // TODO jwt
-		Expires: time.Now().Add(24 * time.Hour),
-		Domain:  cfg.Host.ReverseProxySuffix,
-		// Secure:  true,
-	}, nil
-}
-
 func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ok, err := cfg.Auth.Do(c.Request(), c.Response())
@@ -406,10 +398,14 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
 		}
-		if cfg.Auth == nil || ok {
-			cookie, _ := cfg.newCookie()
-			c.SetCookie(cookie)
+		// set cookie if auth succeeded
+		cookie, err := cfg.Auth.newAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
+		if err != nil {
+			log.Println("[error] failed to create auth cookie:", err)
+			return echo.ErrInternalServerError
 		}
+		c.SetCookie(cookie)
+
 		if !ok {
 			log.Println("[warn] auth failed")
 			return echo.ErrUnauthorized
