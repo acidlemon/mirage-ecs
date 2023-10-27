@@ -432,8 +432,16 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if err := cfg.CheckOrigin(c); err != nil {
 				return err
 			}
-		case AuthorizedByToken, "":
+		case AuthorizedByToken:
 			// no need to check origin
+		case "":
+			// not API request requires CSRF protection.
+			// e.g. POST /launch
+			if !strings.HasPrefix(c.Request().URL.Path, "/api/") {
+				if err := cfg.CheckOrigin(c); err != nil {
+					return err
+				}
+			}
 		default:
 			log.Println("[error] unknown auth method:", method)
 			return echo.ErrInternalServerError
