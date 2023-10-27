@@ -391,26 +391,62 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 	return nil
 }
 
+func (cfg *Config) CheckOrigin(c echo.Context) error {
+	req := c.Request()
+	if req.Method != http.MethodPost {
+		return nil
+	}
+	origin := req.Header.Get("Origin")
+	log.Println("[debug] checking origin:", req.Method, req.URL.Path, origin)
+	if origin == "" {
+		log.Println("[warn] origin is not set")
+		return echo.ErrForbidden
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		log.Println("[warn] invalid origin:", origin, err)
+		return echo.ErrForbidden
+	}
+	if u.Host != cfg.Host.WebApi {
+		log.Println("[warn] invalid origin:", origin)
+		return echo.ErrForbidden
+	}
+	return nil
+}
+
 func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		ok, err := cfg.Auth.Do(c.Request(), c.Response())
+		ok, method, err := cfg.Auth.Do(c.Request(), c.Response())
 		if err != nil {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
 		}
-		// set cookie if auth succeeded
-		if ok {
-			cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
-			if err != nil {
-				log.Println("[error] failed to create auth cookie:", err)
-				return echo.ErrInternalServerError
-			}
-			if cookie.Value != "" {
-				c.SetCookie(cookie)
-			}
-		} else {
+		if !ok {
 			log.Println("[warn] auth failed")
 			return echo.ErrUnauthorized
+		}
+
+		// CSRF protection
+		switch method {
+		case AuthorizedByCookie, AuthorizedByBasic, AuthorizedByAmznOIDC:
+			if err := cfg.CheckOrigin(c); err != nil {
+				return err
+			}
+		case AuthorizedByToken, "":
+			// no need to check origin
+		default:
+			log.Println("[error] unknown auth method:", method)
+			return echo.ErrInternalServerError
+		}
+
+		// set cookie if auth succeeded
+		cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
+		if err != nil {
+			log.Println("[error] failed to create auth cookie:", err)
+			return echo.ErrInternalServerError
+		}
+		if cookie.Value != "" {
+			c.SetCookie(cookie)
 		}
 		return next(c)
 	}

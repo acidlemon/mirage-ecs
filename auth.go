@@ -24,10 +24,22 @@ type Auth struct {
 	once       sync.Once
 }
 
-func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
+const (
+	AuthorizedByCookie   = "cookie"
+	AuthorizedByToken    = "token"
+	AuthorizedByAmznOIDC = "amznoidc"
+	AuthorizedByBasic    = "basic"
+)
+
+func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, string, error) {
 	if a == nil {
 		// no auth
-		return true, nil
+		return true, "", nil
+	}
+
+	// token auth is evaluated at first
+	if ok := a.Token.Match(req.Header); ok {
+		return ok, AuthorizedByToken, nil
 	}
 
 	if cookie, err := req.Cookie(AuthCookieName); err == nil {
@@ -36,26 +48,23 @@ func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
 			// fallthrough
 		} else {
 			log.Println("[debug] auth cookie succeeded")
-			return true, nil
+			return true, AuthorizedByCookie, nil
 		}
 	}
 
-	if ok := a.Token.Match(req.Header); ok {
-		return ok, nil
-	}
 	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
-		return false, err
+		return false, "", err
 	} else if ok {
-		return true, nil
+		return true, AuthorizedByAmznOIDC, nil
 	}
 	// basic auth is evaluated at last
 	// because www-authenticate header is set if auth failed.
 	if ok := a.Basic.Match(req.Header); ok {
-		return ok, nil
+		return ok, AuthorizedByBasic, nil
 	} else {
 		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
 	}
-	return false, nil
+	return false, "", nil
 }
 
 func (a *Auth) NewAuthCookie(expire time.Duration, domain string) (*http.Cookie, error) {
