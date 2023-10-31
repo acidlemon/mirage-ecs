@@ -285,6 +285,13 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		}
 	}
 
+	if cfg.localMode {
+		log.Println("[info] local mode: setting host suffix to .localtest.me")
+		cfg.Host.ReverseProxySuffix = ".localtest.me"
+		cfg.Host.WebApi = "mirage.localtest.me"
+		log.Printf("[info] You can access to http://mirage.localtest.me:%d/", cfg.Listen.HTTP[0].ListenPort)
+	}
+
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
@@ -311,6 +318,10 @@ func (c *Config) NewTaskRunner() TaskRunner {
 }
 
 func (c *Config) fillECSDefaults(ctx context.Context) error {
+	if c.localMode {
+		log.Println("[info] ECS config is not used in local mode")
+		return nil
+	}
 	defer func() {
 		if err := c.ECS.validate(); err != nil {
 			log.Printf("[error] invalid ECS config: %s", c.ECS)
