@@ -295,7 +295,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.Counter.Add()
 
 	log.Printf("[debug] subdomain %s %s roundtrip", t.Subdomain, req.URL)
-	if t.AuthCookieValidateFunc != nil {
+	// OPTIONS request is not authenticated because it is preflighted.
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests
+	if t.AuthCookieValidateFunc != nil && req.Method != http.MethodOptions {
 		log.Printf("[debug] subdomain %s %s roundtrip: require auth cookie", t.Subdomain, req.URL)
 		cookie, err := req.Cookie(AuthCookieName)
 		if err != nil || cookie == nil {
