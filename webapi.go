@@ -79,7 +79,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 }
 
 func (api *WebApi) Top(c echo.Context) error {
-	return c.Render(http.StatusOK, "layout.html", nil)
+	return c.Render(http.StatusOK, "layout.html", map[string]interface{}{})
 }
 
 func (api *WebApi) List(c echo.Context) error {
