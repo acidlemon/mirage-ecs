@@ -109,6 +109,9 @@ func (api *WebApi) Launch(c echo.Context) error {
 	if err != nil {
 		return c.String(code, err.Error())
 	}
+	if c.Request().Header.Get("Hx-Request") == "true" {
+		return c.String(code, "ok")
+	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
