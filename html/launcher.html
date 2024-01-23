@@ -1,62 +1,70 @@
-{{ template "header" }}
-
-<h1>Launch Container</h1>
-
-<div class="col-md-12">
-<form id="launcher" method="POST" action="/launch">
-  <label for="subdomain" class="col-md-2 text-right">subdomain </label>
-  <input type="text" name="subdomain" value="" id="subdomain"
-         class="col-md-5" placeholder="mybranch">
-  <p class="col-md-5">*Required</p>
-
-{{ range $param := .Parameters }}
-
-  <label for="{{ $param.Name }}" class="col-md-2 text-right">{{ $param.Name }} </label>
-  {{ if $param.Options }}
-  <select name="{{ $param.Name }}" id="{{ $param.Name }}" class="col-md-5">
-    {{ range $option := $param.Options }}
-    <option value="{{ $option.Value }}" {{ if eq $option.Value $param.Default }}selected{{ end }}>{{ or $option.Label
-      $option.Value }}</option>
+<div class="modal-dialog modal-dialog-centered">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title">Launch New Task</h5>
+    </div>
+    <div class="modal-body">
+      <form id="launcher-form" method="POST" action="/launch">
+        <div class="mb-3">
+          <label for="subdomain" class="form-label">subdomain</label>
+          <input class="form-control" type="text" name="subdomain" value="" id="subdomain" placeholder="mybranch" required
+            pattern="[a-zA-Z-][a-zA-Z0-9-]+">
+          <div class="form-text">*Required</div>
+        </div>
+        {{ range $param := .Parameters }}
+        <div class="mb-3">
+          <label for="{{ $param.Name }}" class="form-label">{{ $param.Name }}</label>
+          {{ if $param.Options }}
+          <select class="form-control" name="{{ $param.Name }}" id="{{ $param.Name }}">
+            {{ range $option := $param.Options }}
+            <option value="{{ $option.Value }}" {{ if eq $option.Value $param.Default }}selected{{ end }}>{{ or $option.Label
+            $option.Value }}</option>
+            {{ end }}
+          </select>
+          {{ else }}
+          <input class="form-control" type="text" name="{{ $param.Name }}" value="{{ $param.Default }}" id="{{ $param.Name }}"
+            placeholder="your {{ $param.Name }}" {{ if $param.Required }}required{{ end }} />
+          {{ end }}
+          <div class="form-text">
+            {{ if $param.Required }}*Required{{ else }}(Optional){{ end }}
+          </div>
+          <div class="form-text">
+            {{ $param.Description }}
+          </div>
+          </div>
     {{ end }}
-  </select>
-  {{ else }}
-  <input type="text" name="{{ $param.Name }}" value="{{ $param.Default }}" id="{{ $param.Name }}" class="col-md-5"
-    placeholder="your {{ $param.Name }}" />
-  {{ end }}
-  <p class="col-md-5">{{ if $param.Required }}*Required {{ else }} (optional) {{ end }}</p>
-  
-  {{ if $param.Description }}
-  <span class="col-md-2"></span>
-  <div class="col-md-10">
-    <p>{{ $param.Description }}</p>
+    {{ range $i, $taskdef := .DefaultTaskDefinitions }}
+      {{ if eq $i 0 }}
+        <div class="mb-3">
+          <label for="taskdef" class="col-md-3 text-right">Task Definitions</label>
+      {{ end }}
+          <input class="form-control" type="text" name="taskdef" value="{{ $taskdef }}" id="taskdef"
+            placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp"
+          required>
+          <div class="form-text">*Required</div>
+          </div>
+    {{ end }}
+        <div class="mb-3">
+          <input type="submit" class="btn btn-primary" value="Launch" hx-post="/launch" id="launch-submit">
+        </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+      <button id="close-button" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+    </div>
   </div>
-  {{ end }}
-
-{{ end }}
-
-{{ range $i, $taskdef := .DefaultTaskDefinitions }}
-
-{{ if eq $i 0 }}
-
-  <label for="taskdef" class="col-md-2 text-right">Task Definitions</label>
-
-{{ else }}
-
-  <div class="col-md-2"></div>
-
-{{ end }}
-
-  <input type="text" name="taskdef" value="{{ $taskdef }}" id="taskdef"
-         class="col-md-5" placeholder="arn:aws:ecs:ap-northeast-1:123456789012:task-definition/myapp">
-  <p class="col-md-5">*Required</p>
-
-{{ end }}
-
-  <p class="col-md-7"></p>
-  <p class="col-md-5 text-left">
-    <input type="submit" class="btn btn-primary">
-  </p>
-</form>
 </div>
-
-{{ template "footer" . }}
+<script>
+  document.body.addEventListener('htmx:afterRequest', function (event) {
+    console.log(event.detail);
+    if (event.detail.pathInfo.requestPath == '/launch') {
+      if (event.detail.xhr.status >= 400) {
+        var responseBody = event.detail.xhr.responseText;
+        alert('エラーが発生しました: ' + responseBody);
+      } else {
+        // success
+        location.reload();
+      }
+    }
+  });
+</script>

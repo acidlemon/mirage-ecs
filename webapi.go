@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/samber/lo"
 )
 
@@ -56,7 +57,9 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 
 	e := echo.New()
 	e.Use(cfg.AuthMiddleware)
-	e.GET("/", app.List)
+	e.Use(middleware.Logger())
+	e.GET("/", app.Top)
+	e.GET("/list", app.List)
 	e.GET("/launcher", app.Launcher)
 	e.POST("/launch", app.Launch)
 	e.POST("/terminate", app.Terminate)
@@ -73,6 +76,10 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	app.Echo = e
 
 	return app
+}
+
+func (api *WebApi) Top(c echo.Context) error {
+	return c.Render(http.StatusOK, "layout.html", map[string]interface{}{})
 }
 
 func (api *WebApi) List(c echo.Context) error {
@@ -101,6 +108,9 @@ func (api *WebApi) Launch(c echo.Context) error {
 	code, err := api.launch(c)
 	if err != nil {
 		return c.String(code, err.Error())
+	}
+	if c.Request().Header.Get("Hx-Request") == "true" {
+		return c.String(code, "ok")
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
