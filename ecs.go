@@ -11,6 +11,7 @@ import (
 	"time"
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
+	"github.com/fujiwara/tracer"
 	"github.com/samber/lo"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -146,9 +147,10 @@ const (
 type TaskRunner interface {
 	Launch(ctx context.Context, subdomain string, param TaskParameter, taskdefs ...string) error
 	Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error)
+	Trace(ctx context.Context, id string) (string, error)
 	Terminate(ctx context.Context, subdomain string) error
 	TerminateBySubdomain(ctx context.Context, subdomain string) error
-	List(ctx context.Context, status string) ([]Information, error)
+	List(ctx context.Context, status string) ([]*Information, error)
 	SetProxyControlChannel(ch chan *proxyControl)
 	GetAccessCount(ctx context.Context, subdomain string, duration time.Duration) (int64, error)
 	PutAccessCounts(context.Context, map[string]accessCount) error
@@ -159,15 +161,21 @@ type ECS struct {
 	svc            *ecs.Client
 	logsSvc        *cwlogs.Client
 	cwSvc          *cw.Client
+	tracer         *tracer.Tracer
 	proxyControlCh chan *proxyControl
 }
 
 func NewECSTaskRunner(cfg *Config) TaskRunner {
+	tr, err := tracer.NewWithConfig(*cfg.awscfg)
+	if err != nil {
+		panic(err)
+	}
 	e := &ECS{
 		cfg:     cfg,
 		svc:     ecs.NewFromConfig(*cfg.awscfg),
 		logsSvc: cwlogs.NewFromConfig(*cfg.awscfg),
 		cwSvc:   cw.NewFromConfig(*cfg.awscfg),
+		tracer:  tr,
 	}
 	return e
 }
@@ -254,6 +262,19 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 	return eg.Wait()
 }
 
+func (e *ECS) Trace(ctx context.Context, id string) (string, error) {
+	tracerOpt := &tracer.RunOption{
+		Stdout:   true,
+		Duration: 5 * time.Minute,
+	}
+	buf := &strings.Builder{}
+	e.tracer.SetOutput(buf)
+	if err := e.tracer.Run(ctx, e.cfg.ECS.Cluster, id, tracerOpt); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func (e *ECS) Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error) {
 	infos, err := e.find(ctx, subdomain)
 	if err != nil {
@@ -279,7 +300,7 @@ func (e *ECS) Logs(ctx context.Context, subdomain string, since time.Time, tail 
 	return logs, eg.Wait()
 }
 
-func (e *ECS) logs(ctx context.Context, info Information, since time.Time, tail int) ([]string, error) {
+func (e *ECS) logs(ctx context.Context, info *Information, since time.Time, tail int) ([]string, error) {
 	task := info.task
 	taskdefOut, err := e.svc.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: task.TaskDefinitionArn,
@@ -375,12 +396,12 @@ func (e *ECS) TerminateBySubdomain(ctx context.Context, subdomain string) error 
 	return eg.Wait()
 }
 
-func (e *ECS) find(ctx context.Context, subdomain string) ([]Information, error) {
-	var results []Information
+func (e *ECS) find(ctx context.Context, subdomain string) ([]*Information, error) {
+	var results []*Information
 
 	infos, err := e.List(ctx, statusRunning)
 	if err != nil {
-		return results, err
+		return nil, err
 	}
 	for _, info := range infos {
 		if info.SubDomain == subdomain {
@@ -390,9 +411,9 @@ func (e *ECS) find(ctx context.Context, subdomain string) ([]Information, error)
 	return results, nil
 }
 
-func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, error) {
+func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, error) {
 	log.Printf("[debug] call ecs.List(%s)", desiredStatus)
-	infos := []Information{}
+	infos := []*Information{}
 	var nextToken *string
 	cluster := aws.String(e.cfg.ECS.Cluster)
 	include := []types.TaskField{types.TaskFieldTags}
@@ -403,10 +424,10 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 			DesiredStatus: types.DesiredStatus(desiredStatus),
 		})
 		if err != nil {
-			return infos, fmt.Errorf("failed to list tasks: %w", err)
+			return nil, fmt.Errorf("failed to list tasks: %w", err)
 		}
 		if len(listOut.TaskArns) == 0 {
-			return infos, nil
+			return []*Information{}, nil
 		}
 
 		tasksOut, err := e.svc.DescribeTasks(ctx, &ecs.DescribeTasksInput{
@@ -424,7 +445,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]Information, er
 				// task is not managed by Mirage
 				continue
 			}
-			info := Information{
+			info := &Information{
 				ID:         *task.TaskArn,
 				ShortID:    shortenArn(*task.TaskArn),
 				SubDomain:  decodeTagValue(getTagsFromTask(&task, "Subdomain")),

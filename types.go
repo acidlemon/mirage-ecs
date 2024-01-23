@@ -7,7 +7,7 @@ import (
 
 // APIListResponse is a response of /api/list
 type APIListResponse struct {
-	Result []APITaskInfo `json:"result"`
+	Result []*APITaskInfo `json:"result"`
 }
 
 type APITaskInfo = Information

@@ -7,31 +7,47 @@
   <table class="table table-striped">
     <thead>
       <tr>
-        <th class="col-md-2">subdomain</th>
-        <th class="col-md-2">branch</th>
+        <th class="col-md-1">subdomain</th>
+        <th class="col-md-1">branch</th>
         <th class="col-md-2">Task definition</th>
         <th class="col-md-2">Task ID</th>
-        <th class="col-md-2">Started</th>
-        <th class="col-md-2">Status</th>
-        <th class="col-md-2 text-center">action</th>
+        <th class="col-md-1">Started</th>
+        <th class="col-md-1">Status</th>
+        <th class="col-md-1 text-center">Action</th>
+        <th class="col-md-1 text-center">Trace</th>
       </tr>
     </thead>
     <tbody>
       {{ range $row := .info }}
       <tr>
-        <td class="col-md-2">{{ $row.SubDomain }}</td>
-        <td class="col-md-2">{{ $row.GitBranch }}</td>
+        <td class="col-md-1">{{ $row.SubDomain }}</td>
+        <td class="col-md-1">{{ $row.GitBranch }}</td>
         <td class="col-md-2">{{ $row.TaskDef }}</td>
-        <td class="col-md-2">{{ $row.ShortID }}</td>
-        <td class="col-md-2">{{if $row.Created.IsZero}}-
+        <td class="col-md-2">
+          <div class="text-container">
+            <span class="text-short" id="id-{{ $row.ShortID }}">{{ slice $row.ShortID 0 8 }}...
+            <i class="bi bi-chevron-double-right" onclick="document.querySelector('#id-{{ $row.ShortID }}').innerHTML='{{ $row.ShortID }}'"></i>
+            </span>
+          </div>
+        </td>
+        <td class="col-md-1">{{if $row.Created.IsZero}}-
           {{ else }}{{$row.Created.Format "2006-01-02 15:04:05 MST"}}
           {{end}}</td>
-        <td class="col-md-2">{{ $row.LastStatus }}</td>
-        <td class="col-md-2 text-center">
-          <button class="btn btn-danger terminate-button" hx-post="/terminate" hx-target="#terminate-subdomain"
+        <td class="col-md-1">{{ $row.LastStatus }}</td>
+        <td class="col-md-1 text-center">
+          {{ if eq $row.LastStatus "RUNNING" }}
+          <button title="Terminate" class="btn btn-danger terminate-button" hx-post="/terminate"
+            hx-target="#terminate-subdomain"
             hx-trigger="click" hx-confirm="Are you sure you wish to terminate {{ $row.SubDomain }}?"
             hx-vals='{"subdomain": "{{ $row.SubDomain }}"}'
-            onclick="this.addEventListener('htmx:afterRequest', function() { document.querySelector('#refresh-button').click(); });">Terminate</button>
+            onclick="this.addEventListener('htmx:afterRequest', function() { document.querySelector('#refresh-button').click(); });">
+            <i class="bi bi-stop-circle"></i></button>
+          </button>
+          {{ end }}
+          </td>
+          <td class="col-md-1">
+            <a title="Trace" href="/trace/{{ $row.ShortID }}" target="_blank" class="btn"><i class="bi bi-file-text"></i></a>
+          </td>
         </td>
       </tr>
       {{ end }}

@@ -12,11 +12,13 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 // LocalTaskRunner is a mock implementation of TaskRunner.
 type LocalTaskRunner struct {
-	Informations map[string]Information
+	Informations []*Information
 
 	stopServerFuncs map[string]func()
 	cfg             *Config
@@ -25,7 +27,7 @@ type LocalTaskRunner struct {
 
 func NewLocalTaskRunner(cfg *Config) TaskRunner {
 	return &LocalTaskRunner{
-		Informations:    map[string]Information{},
+		Informations:    []*Information{},
 		stopServerFuncs: map[string]func(){},
 		cfg:             cfg,
 	}
@@ -35,27 +37,34 @@ func (e *LocalTaskRunner) SetProxyControlChannel(ch chan *proxyControl) {
 	e.proxyControlCh = ch
 }
 
-func (e *LocalTaskRunner) List(_ context.Context, status string) ([]Information, error) {
-	infos := make([]Information, 0, len(e.Informations))
-	for _, info := range e.Informations {
-		infos = append(infos, info)
-	}
+func (e *LocalTaskRunner) List(_ context.Context, status string) ([]*Information, error) {
+	infos := lo.Filter(e.Informations, func(info *Information, _ int) bool {
+		return info.LastStatus == status
+	})
 	sort.Slice(infos, func(i, j int) bool {
 		return infos[i].Created.After(infos[j].Created)
 	})
 	return infos, nil
 }
 
+func (e *LocalTaskRunner) Trace(_ context.Context, id string) (string, error) {
+	return fmt.Sprintf("mock trace of %s", id), nil
+}
+
 func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
-	if info, ok := e.Informations[subdomain]; ok {
-		return fmt.Errorf("subdomain %s is already used by %s", subdomain, info.ID)
+	if info, ok := e.find(subdomain); ok {
+		log.Printf("[info] subdomain %s is already running task id %s. Terminating...", subdomain, info.ShortID)
+		err := e.TerminateBySubdomain(ctx, subdomain)
+		if err != nil {
+			return err
+		}
 	}
 	id := generateRandomHexID(32)
 	env := option.ToEnv(subdomain, e.cfg.Parameter)
 	log.Printf("[info] Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id)
 	contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
 	port, stopServerFunc := runMockServer(contents)
-	e.Informations[subdomain] = Information{
+	e.Informations = append(e.Informations, &Information{
 		ID:         "arn:aws:ecs:ap-northeast-1:123456789012:task/mirage/" + id,
 		ShortID:    id,
 		SubDomain:  subdomain,
@@ -69,7 +78,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 		},
 		Env:  env,
 		Tags: option.ToECSTags(subdomain, e.cfg.Parameter),
-	}
+	})
 	e.stopServerFuncs[id] = stopServerFunc
 	e.proxyControlCh <- &proxyControl{
 		Action:    proxyAdd,
@@ -94,9 +103,18 @@ func (e *LocalTaskRunner) Terminate(ctx context.Context, id string) error {
 	return nil
 }
 
+func (e *LocalTaskRunner) find(subdomain string) (*Information, bool) {
+	for _, info := range e.Informations {
+		if info.SubDomain == subdomain && info.LastStatus == statusRunning {
+			return info, true
+		}
+	}
+	return nil, false
+}
+
 func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
 	log.Printf("[info] Terminating a mock task: subdomain=%s", subdomain)
-	if info, ok := e.Informations[subdomain]; ok {
+	if info, ok := e.find(subdomain); ok {
 		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
 			stop()
 		}
@@ -104,7 +122,11 @@ func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain st
 			Action:    proxyRemove,
 			Subdomain: subdomain,
 		}
-		delete(e.Informations, subdomain)
+		info.LastStatus = statusStopped
+		e.Informations = lo.Filter(e.Informations, func(i *Information, _ int) bool {
+			return i.ShortID != info.ShortID
+		})
+		e.Informations = append(e.Informations, info)
 	}
 	return nil
 }
