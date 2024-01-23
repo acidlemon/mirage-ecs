@@ -208,15 +208,14 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 	}
 
 	// create reverse proxy
+	proxy := false
 	for _, v := range r.cfg.Listen.HTTP {
-		if v.TargetPort != targetPort {
-			if !r.cfg.localMode {
-				log.Printf("[warn] target port %d is not defined in config.", targetPort)
-				continue
-			}
+		if (v.TargetPort != targetPort) && !r.cfg.localMode {
+			continue
 			// local mode allows any port
 		}
 		if ph.exists(v.ListenPort, addr) {
+			proxy = true
 			continue
 		}
 		destUrlString := "http://" + addr
@@ -237,8 +236,14 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		}
 		handler.Transport = tp
 		ph.add(v.ListenPort, addr, handler)
+		proxy = true
 		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
 	}
+	if !proxy {
+		log.Printf("[warn] proxy of subdomain %s(target port %d) is not created. define target port in listen.http[]", subdomain, targetPort)
+		return
+	}
+
 	r.domainMap[subdomain] = ph
 	for _, name := range r.domains {
 		if name == subdomain {
