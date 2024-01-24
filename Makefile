@@ -22,3 +22,6 @@ push-image: docker-image
 
 test:
 	go test -v ./...
+
+install:
+	go install github.com/acidlemon/mirage-ecs/cmd/mirage-ecs

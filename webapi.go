@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +64,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	e.GET("/launcher", app.Launcher)
 	e.POST("/launch", app.Launch)
 	e.POST("/terminate", app.Terminate)
+	e.GET("/trace/:taskid", app.Trace)
 
 	e.GET("/api/list", app.ApiList)
 	e.POST("/api/launch", app.ApiLaunch)
@@ -83,7 +85,29 @@ func (api *WebApi) Top(c echo.Context) error {
 }
 
 func (api *WebApi) List(c echo.Context) error {
-	info, err := api.runner.List(c.Request().Context(), statusRunning)
+	ctx := c.Request().Context()
+	infoRunning, err := api.runner.List(ctx, statusRunning)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	infoStopped, err := api.runner.List(ctx, statusStopped)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	sort.Slice(infoStopped, func(i, j int) bool {
+		return infoStopped[i].Created.Before(infoStopped[j].Created)
+	})
+	// stopped subdomains shows only one
+	stoppedSubdomains := make(map[string]struct{}, len(infoStopped))
+	infoStopped = lo.Filter(infoStopped, func(info *Information, _ int) bool {
+		if _, ok := stoppedSubdomains[info.SubDomain]; ok {
+			// already seen
+			return false
+		}
+		stoppedSubdomains[info.SubDomain] = struct{}{}
+		return true
+	})
+	info := append(infoRunning, infoStopped...)
 	value := map[string]interface{}{
 		"info":  info,
 		"error": err,
@@ -121,6 +145,18 @@ func (api *WebApi) Terminate(c echo.Context) error {
 		c.String(code, err.Error())
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
+}
+
+func (api *WebApi) Trace(c echo.Context) error {
+	taskID := c.Param("taskid")
+	if taskID == "" {
+		return c.String(http.StatusBadRequest, "taskid required")
+	}
+	trace, err := api.runner.Trace(c.Request().Context(), taskID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	return c.String(http.StatusOK, trace)
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {
