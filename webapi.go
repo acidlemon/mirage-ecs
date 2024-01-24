@@ -7,7 +7,9 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"sort"
@@ -80,6 +82,22 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	return app
 }
 
+func (api *WebApi) ValidateOrigin(c echo.Context) error {
+	origin := c.Request().Header.Get("Origin")
+	if origin == "" {
+		return fmt.Errorf("origin required")
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("invalid origin: %s", origin)
+	}
+	host, _, _ := net.SplitHostPort(u.Host)
+	if host != api.cfg.Host.WebApi {
+		return fmt.Errorf("invalid origin host: %s", u.Host)
+	}
+	return nil
+}
+
 func (api *WebApi) Top(c echo.Context) error {
 	return c.Render(http.StatusOK, "layout.html", map[string]interface{}{})
 }
@@ -129,6 +147,9 @@ func (api *WebApi) Launcher(c echo.Context) error {
 }
 
 func (api *WebApi) Launch(c echo.Context) error {
+	if err := api.ValidateOrigin(c); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
 	code, err := api.launch(c)
 	if err != nil {
 		return c.String(code, err.Error())
@@ -140,6 +161,9 @@ func (api *WebApi) Launch(c echo.Context) error {
 }
 
 func (api *WebApi) Terminate(c echo.Context) error {
+	if err := api.ValidateOrigin(c); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
 	code, err := api.terminate(c)
 	if err != nil {
 		c.String(code, err.Error())
