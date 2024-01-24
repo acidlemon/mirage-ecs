@@ -24,36 +24,67 @@ type Auth struct {
 	once       sync.Once
 }
 
-func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
-	if a == nil {
-		// no auth
-		return true, nil
-	}
+type AuthMethod func(req *http.Request, res http.ResponseWriter) (bool, error)
 
+func (a *Auth) ByCookie(req *http.Request, res http.ResponseWriter) (bool, error) {
 	if cookie, err := req.Cookie(AuthCookieName); err == nil {
 		if err := a.ValidateAuthCookie(cookie); err != nil {
 			log.Printf("[warn] auth cookie failed: %s", err)
-			// fallthrough
+			return false, nil
 		} else {
 			log.Println("[debug] auth cookie succeeded")
 			return true, nil
 		}
+	} else {
+		return false, err
 	}
+}
 
+func (a *Auth) ByBasic(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.Basic == nil {
+		return false, nil
+	}
+	if ok := a.Basic.Match(req.Header); ok {
+		return ok, nil
+	} else {
+		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
+	}
+	return false, nil
+}
+
+func (a *Auth) ByToken(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.Token == nil {
+		return false, nil
+	}
 	if ok := a.Token.Match(req.Header); ok {
 		return ok, nil
+	}
+	return false, nil
+}
+
+func (a *Auth) ByAmznOIDC(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.AmznOIDC == nil {
+		return false, nil
 	}
 	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
 		return false, err
 	} else if ok {
 		return true, nil
 	}
-	// basic auth is evaluated at last
-	// because www-authenticate header is set if auth failed.
-	if ok := a.Basic.Match(req.Header); ok {
-		return ok, nil
-	} else {
-		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
+	return false, nil
+}
+
+func (a *Auth) Do(req *http.Request, res http.ResponseWriter, methods ...AuthMethod) (bool, error) {
+	if a == nil {
+		// no auth
+		return true, nil
+	}
+	for _, m := range methods {
+		if ok, err := m(req, res); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
 	}
 	return false, nil
 }

@@ -393,13 +393,28 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 
 func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		ok, err := cfg.Auth.Do(c.Request(), c.Response())
+		isAPIRequest := strings.HasPrefix(c.Request().URL.Path, "/api/")
+		methods := []AuthMethod{cfg.Auth.ByToken}
+		if !isAPIRequest {
+			// web access allows other auth methods
+			methods = append(methods,
+				cfg.Auth.ByCookie,
+				cfg.Auth.ByAmznOIDC,
+				cfg.Auth.ByBasic, // basic auth must be evaluated at last
+			)
+		}
+		ok, err := cfg.Auth.Do(c.Request(), c.Response(), methods...)
 		if err != nil {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
 		}
-		// set cookie if auth succeeded
-		if ok {
+		if !ok {
+			log.Println("[warn] auth failed")
+			return echo.ErrUnauthorized
+		}
+
+		// set auth cookie for web access
+		if !isAPIRequest {
 			cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
 			if err != nil {
 				log.Println("[error] failed to create auth cookie:", err)
@@ -408,9 +423,6 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if cookie.Value != "" {
 				c.SetCookie(cookie)
 			}
-		} else {
-			log.Println("[warn] auth failed")
-			return echo.ErrUnauthorized
 		}
 		return next(c)
 	}
