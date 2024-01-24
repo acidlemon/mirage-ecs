@@ -78,6 +78,8 @@ func (a *Auth) NewAuthCookie(expire time.Duration, domain string) (*http.Cookie,
 		Expires:  expireAt,
 		Domain:   domain,
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
 	}, nil
 }
 
