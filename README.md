@@ -346,7 +346,7 @@ See "mirage link" section for details.
 
 This section is optional.
 
-mirage-ecs supports token authentication, basic authentication and Amazon OIDC authentication by Application Load Balancer. You can use multiple authentication methods at the same time.
+mirage-ecs supports token authentication, basic authentication and Amazon OIDC authentication by Application Load Balancer for web browser access (excludes requests for `/api/*`). You can use multiple authentication methods at the same time.
 
 If you configure multiple authentication methods, mirage-ecs checks the methods in order token, Amazon OIDC, and basic.  When some method succeeds, mirage-ecs allows access.
 
@@ -370,7 +370,10 @@ auth:
 
 `cookie_secret` section configures secret key for cookie authentication.
 
-When you configure `cookie_secret`, mirage-ecs sets a cookie to the browser after being authorized by other authentication methods. The cookie is used to authenticate the next request for webapi and reverse proxy to the target ECS tasks.
+When you configure `cookie_secret`, mirage-ecs sets a cookie to the browser after being authorized by other authentication methods. The cookie is used to authenticate the next request for web browser access and reverse proxy to the target ECS tasks.
+
+When `/api/*` is accessed, mirage-ecs does not set a cookie to the clients. The `/api/*`
+paths allow authentication by token only.
 
 ##### `token` section
 
