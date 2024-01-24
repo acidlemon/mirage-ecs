@@ -24,7 +24,7 @@ type Auth struct {
 	once       sync.Once
 }
 
-type AuthMethod func(req *http.Request, res http.ResponseWriter) (bool, error)
+type Authorizer func(req *http.Request, res http.ResponseWriter) (bool, error)
 
 func (a *Auth) ByCookie(req *http.Request, res http.ResponseWriter) (bool, error) {
 	if cookie, err := req.Cookie(AuthCookieName); err == nil {
@@ -36,7 +36,9 @@ func (a *Auth) ByCookie(req *http.Request, res http.ResponseWriter) (bool, error
 			return true, nil
 		}
 	} else {
-		return false, err
+		log.Println("[debug] auth cookie not found")
+		// no cookie
+		return false, nil
 	}
 }
 
@@ -45,8 +47,10 @@ func (a *Auth) ByBasic(req *http.Request, res http.ResponseWriter) (bool, error)
 		return false, nil
 	}
 	if ok := a.Basic.Match(req.Header); ok {
+		log.Println("[debug] basic auth succeeded")
 		return ok, nil
 	} else {
+		log.Println("[debug] basic auth failed. set WWW-Authenticate header")
 		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
 	}
 	return false, nil
@@ -57,8 +61,10 @@ func (a *Auth) ByToken(req *http.Request, res http.ResponseWriter) (bool, error)
 		return false, nil
 	}
 	if ok := a.Token.Match(req.Header); ok {
+		log.Println("[debug] token auth succeeded")
 		return ok, nil
 	}
+	log.Println("[debug] token auth failed")
 	return false, nil
 }
 
@@ -69,19 +75,21 @@ func (a *Auth) ByAmznOIDC(req *http.Request, res http.ResponseWriter) (bool, err
 	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
 		return false, err
 	} else if ok {
+		log.Println("[debug] amzn_oidc auth succeeded")
 		return true, nil
 	}
+	log.Println("[debug] amzn_oidc auth failed")
 	return false, nil
 }
 
-func (a *Auth) Do(req *http.Request, res http.ResponseWriter, methods ...AuthMethod) (bool, error) {
+func (a *Auth) Do(req *http.Request, res http.ResponseWriter, runs ...Authorizer) (bool, error) {
 	if a == nil {
 		// no auth
 		return true, nil
 	}
-	for _, m := range methods {
-		if ok, err := m(req, res); err != nil {
-			return false, err
+	for _, run := range runs {
+		if ok, err := run(req, res); err != nil {
+			return false, fmt.Errorf("authorizer %v errored: %w", run, err)
 		} else if ok {
 			return true, nil
 		}
