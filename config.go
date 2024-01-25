@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -404,13 +405,27 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 
 func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		ok, err := cfg.Auth.Do(c.Request(), c.Response())
+		isAPIRequest := strings.HasPrefix(c.Request().URL.Path, "/api/")
+		runs := []Authorizer{cfg.Auth.ByToken}
+		if !isAPIRequest {
+			// web access allows other auth methods
+			runs = append(runs,
+				cfg.Auth.ByAmznOIDC,
+				cfg.Auth.ByBasic, // basic auth must be evaluated at last
+			)
+		}
+		ok, err := cfg.Auth.Do(c.Request(), c.Response(), runs...)
 		if err != nil {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
 		}
-		// set cookie if auth succeeded
-		if ok {
+		if !ok {
+			log.Println("[warn] all auth methods failed")
+			return echo.ErrUnauthorized
+		}
+
+		// set auth cookie for web access
+		if !isAPIRequest {
 			cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
 			if err != nil {
 				log.Println("[error] failed to create auth cookie:", err)
@@ -419,9 +434,6 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if cookie.Value != "" {
 				c.SetCookie(cookie)
 			}
-		} else {
-			log.Println("[warn] auth failed")
-			return echo.ErrUnauthorized
 		}
 		return next(c)
 	}
@@ -527,4 +539,19 @@ func copyToFile(src io.Reader, dst string) (int64, error) {
 	}
 	defer f.Close()
 	return io.Copy(f, src)
+}
+
+func (cfg *Config) ValidateOrigin(origin string) error {
+	if origin == "" {
+		return fmt.Errorf("origin required")
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("invalid origin: %s", origin)
+	}
+	host, _, _ := net.SplitHostPort(u.Host)
+	if host != cfg.Host.WebApi {
+		return fmt.Errorf("invalid origin host: %s", u.Host)
+	}
+	return nil
 }

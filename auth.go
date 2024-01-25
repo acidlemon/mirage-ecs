@@ -24,36 +24,59 @@ type Auth struct {
 	once       sync.Once
 }
 
-func (a *Auth) Do(req *http.Request, res http.ResponseWriter) (bool, error) {
-	if a == nil {
-		// no auth
-		return true, nil
-	}
+type Authorizer func(req *http.Request, res http.ResponseWriter) (bool, error)
 
-	if cookie, err := req.Cookie(AuthCookieName); err == nil {
-		if err := a.ValidateAuthCookie(cookie); err != nil {
-			log.Printf("[warn] auth cookie failed: %s", err)
-			// fallthrough
-		} else {
-			log.Println("[debug] auth cookie succeeded")
-			return true, nil
-		}
+func (a *Auth) ByBasic(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.Basic == nil {
+		return false, nil
 	}
-
-	if ok := a.Token.Match(req.Header); ok {
+	if ok := a.Basic.Match(req.Header); ok {
+		log.Println("[debug] basic auth succeeded")
 		return ok, nil
+	} else {
+		log.Println("[debug] basic auth failed. set WWW-Authenticate header")
+		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
+	}
+	return false, nil
+}
+
+func (a *Auth) ByToken(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.Token == nil {
+		return false, nil
+	}
+	if ok := a.Token.Match(req.Header); ok {
+		log.Println("[debug] token auth succeeded")
+		return ok, nil
+	}
+	log.Println("[debug] token auth failed")
+	return false, nil
+}
+
+func (a *Auth) ByAmznOIDC(req *http.Request, res http.ResponseWriter) (bool, error) {
+	if a == nil || a.AmznOIDC == nil {
+		return false, nil
 	}
 	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
 		return false, err
 	} else if ok {
+		log.Println("[debug] amzn_oidc auth succeeded")
 		return true, nil
 	}
-	// basic auth is evaluated at last
-	// because www-authenticate header is set if auth failed.
-	if ok := a.Basic.Match(req.Header); ok {
-		return ok, nil
-	} else {
-		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
+	log.Println("[debug] amzn_oidc auth failed")
+	return false, nil
+}
+
+func (a *Auth) Do(req *http.Request, res http.ResponseWriter, runs ...Authorizer) (bool, error) {
+	if a == nil {
+		// no auth
+		return true, nil
+	}
+	for _, run := range runs {
+		if ok, err := run(req, res); err != nil {
+			return false, fmt.Errorf("authorizer %v errored: %w", run, err)
+		} else if ok {
+			return true, nil
+		}
 	}
 	return false, nil
 }
@@ -78,6 +101,8 @@ func (a *Auth) NewAuthCookie(expire time.Duration, domain string) (*http.Cookie,
 		Expires:  expireAt,
 		Domain:   domain,
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
 	}, nil
 }
 

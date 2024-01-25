@@ -129,6 +129,9 @@ func (api *WebApi) Launcher(c echo.Context) error {
 }
 
 func (api *WebApi) Launch(c echo.Context) error {
+	if err := api.cfg.ValidateOrigin(c.Request().Header.Get("Origin")); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
 	code, err := api.launch(c)
 	if err != nil {
 		return c.String(code, err.Error())
@@ -140,6 +143,9 @@ func (api *WebApi) Launch(c echo.Context) error {
 }
 
 func (api *WebApi) Terminate(c echo.Context) error {
+	if err := api.cfg.ValidateOrigin(c.Request().Header.Get("Origin")); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
 	code, err := api.terminate(c)
 	if err != nil {
 		c.String(code, err.Error())
