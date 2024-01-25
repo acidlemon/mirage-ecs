@@ -348,6 +348,8 @@ This section is optional.
 
 mirage-ecs supports token authentication, basic authentication and Amazon OIDC authentication by Application Load Balancer for web browser access (excludes requests for `/api/*`). You can use multiple authentication methods at the same time.
 
+For `/api/*` requests, mirage-ecs allows access by token authentication only.
+
 If you configure multiple authentication methods, mirage-ecs checks the methods in order token, Amazon OIDC, and basic.  When some method succeeds, mirage-ecs allows access.
 
 ```yaml
@@ -452,8 +454,11 @@ link:
 
 mirage-ecs provides the following APIs.
 
-POST APIs are accepts parameters from a request body as `application/x-www-form-urlencoded` or `application/json`.
-GET APIs are only accepts URL query parameters.
+POST APIs are accepts parameters from a request body as `content-type: application/json`.
+
+For v1 backward compatibility, `-compat-v1` cli flag enables accepting `application/x-www-form-urlencoded`. But this feature may cause CSRF vulnerability. We recommend to use `application/json` only (v2 defaults).
+
+GET APIs only accept URL query parameters.
 
 ### `GET /api/list`
 
