@@ -18,6 +18,8 @@ archives:
   - files:
       - config_sample.yml
       - html/*
+release:
+  prerelease: auto
 checksum:
   name_template: "checksums.txt"
 snapshot:
