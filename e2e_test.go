@@ -35,19 +35,24 @@ var e2eRequestsJSON = map[string]string{
 }
 
 func TestE2EAPI(t *testing.T) {
-	t.Run("form", func(t *testing.T) {
-		testE2EAPI(t, e2eRequestsForm, "application/x-www-form-urlencoded")
+	t.Run("form v1", func(t *testing.T) {
+		testE2EAPI(t, e2eRequestsForm, "application/x-www-form-urlencoded", true)
 	})
-	t.Run("json", func(t *testing.T) {
-		testE2EAPI(t, e2eRequestsJSON, "application/json")
+	t.Run("json v1", func(t *testing.T) {
+		testE2EAPI(t, e2eRequestsJSON, "application/json", true)
+	})
+
+	t.Run("json v2", func(t *testing.T) {
+		testE2EAPI(t, e2eRequestsJSON, "application/json", false)
 	})
 }
 
-func testE2EAPI(t *testing.T, reqs map[string]string, contentType string) {
+func testE2EAPI(t *testing.T, reqs map[string]string, contentType string, compatV1 bool) {
 	ctx := context.Background()
 	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
 		LocalMode: true,
 		Domain:    "localtest.me",
+		CompatV1:  compatV1,
 	})
 	cfg.Parameter = append(cfg.Parameter, &mirageecs.Parameter{
 		Name:     "env",
@@ -199,6 +204,23 @@ func testE2EAPI(t *testing.T, reqs map[string]string, contentType string) {
 		json.NewDecoder(res.Body).Decode(&r)
 		if len(r.Result) != 0 {
 			t.Errorf("result should be empty %#v", r)
+		}
+	})
+
+	t.Run("/api/launch with form", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", ts.URL+"/api/launch", strings.NewReader(e2eRequestsForm["/api/launch"]))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		expectStatus := 400 // v2
+		if compatV1 {
+			expectStatus = 200 // v1
+		}
+		if res.StatusCode != expectStatus {
+			t.Errorf("status code should be %d: %d", expectStatus, res.StatusCode)
 		}
 	})
 }

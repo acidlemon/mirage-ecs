@@ -209,7 +209,15 @@ func TestAuthMiddleware(t *testing.T) {
 					return c.String(http.StatusNotFound, "not found")
 				}
 			}
-			middleware := config.AuthMiddleware(handler)
+			mdForAPI := config.AuthMiddlewareForAPI(handler)
+			mdForWeb := config.AuthMiddlewareForWeb(handler)
+			middleware := func(c echo.Context) error {
+				if strings.HasPrefix(c.Request().URL.Path, "/api/") {
+					return mdForAPI(c)
+				} else {
+					return mdForWeb(c)
+				}
+			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(tc.Request(), rec)
 			err := middleware(c)
