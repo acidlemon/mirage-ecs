@@ -399,7 +399,6 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if !isAPIRequest {
 			// web access allows other auth methods
 			runs = append(runs,
-				cfg.Auth.ByCookie,
 				cfg.Auth.ByAmznOIDC,
 				cfg.Auth.ByBasic, // basic auth must be evaluated at last
 			)

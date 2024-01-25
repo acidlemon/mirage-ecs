@@ -26,22 +26,6 @@ type Auth struct {
 
 type Authorizer func(req *http.Request, res http.ResponseWriter) (bool, error)
 
-func (a *Auth) ByCookie(req *http.Request, res http.ResponseWriter) (bool, error) {
-	if cookie, err := req.Cookie(AuthCookieName); err == nil {
-		if err := a.ValidateAuthCookie(cookie); err != nil {
-			log.Printf("[warn] auth cookie failed: %s", err)
-			return false, nil
-		} else {
-			log.Println("[debug] auth cookie succeeded")
-			return true, nil
-		}
-	} else {
-		log.Println("[debug] auth cookie not found")
-		// no cookie
-		return false, nil
-	}
-}
-
 func (a *Auth) ByBasic(req *http.Request, res http.ResponseWriter) (bool, error) {
 	if a == nil || a.Basic == nil {
 		return false, nil

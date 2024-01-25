@@ -167,38 +167,17 @@ func TestAuthMiddleware(t *testing.T) {
 			BodyContains: "launched",
 		},
 		{
-			Name: "POST /launch succeeds with valid origin header with valid cookie",
+			Name: "POST /launch fails with valid origin header with valid cookie only",
 			Request: func() *http.Request {
 				req := httptest.NewRequest(http.MethodPost, "/launch", nil)
 				req.AddCookie(validCookie)
 				req.Header.Set("Origin", "https://mirage.localtest.me:8000")
 				return req
 			},
-			ExpectStatus: 200,
-			BodyContains: "launched",
+			ExpectStatus: 401,
 		},
 		{
-			Name: "POST /launch invalid host origin header",
-			Request: func() *http.Request {
-				req := httptest.NewRequest(http.MethodPost, "/launch", nil)
-				req.Header.Add("origin", "https://xxx.localtest.me:8000")
-				req.AddCookie(validCookie)
-				return req
-			},
-			ExpectStatus: 400,
-		},
-		{
-			Name: "Authorized by valid cookie",
-			Request: func() *http.Request {
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
-				req.AddCookie(validCookie)
-				return req
-			},
-			ExpectStatus: 200,
-			BodyContains: "ok",
-		},
-		{
-			Name: "/api/* don't allow cookie auth",
+			Name: "webapi dosen't allow cookie auth",
 			Request: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/api/list", nil)
 				req.AddCookie(validCookie)
