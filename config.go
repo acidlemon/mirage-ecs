@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -193,6 +194,7 @@ type ConfigParams struct {
 	LocalMode   bool
 	DefaultPort int
 	CompatV1    bool
+	LogFormat   string
 }
 
 type Network struct {
@@ -236,6 +238,16 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 
 		localMode: p.LocalMode,
 		compatV1:  p.CompatV1,
+	}
+	opt := &slog.HandlerOptions{
+		Level: LogLevel,
+	}
+
+	switch p.LogFormat {
+	case "text":
+		slog.SetDefault(slog.New(NewLogHandler(os.Stderr, opt)))
+	case "json":
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, opt)))
 	}
 
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {

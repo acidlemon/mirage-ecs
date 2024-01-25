@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"sort"
@@ -53,7 +54,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 			laddr := fmt.Sprintf("%s:%d", m.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				log.Printf("[error] cannot listen %s: %s", laddr, err)
+				slog.Error(f("[error] cannot listen %s: %s", laddr, err))
 				errors <- err
 				cancel()
 				return
@@ -63,13 +64,13 @@ func (m *Mirage) Run(ctx context.Context) error {
 			mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 				m.ServeHTTPWithPort(w, req, port)
 			})
-			log.Println("[info] listen addr:", laddr)
+			slog.Info(f("listen addr:", laddr))
 			srv := &http.Server{
 				Handler: mux,
 			}
 			go srv.Serve(listener)
 			<-ctx.Done()
-			log.Println("[info] shutdown server:", laddr)
+			slog.Info(f("[info] shutdown server:", laddr))
 			srv.Shutdown(ctx)
 		}(v.ListenPort)
 	}
@@ -78,7 +79,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 	go m.syncECSToMirage(ctx, &wg)
 	go m.RunAccessCountCollector(ctx, &wg)
 	wg.Wait()
-	log.Println("[info] shutdown mirage-ecs")
+	slog.Info("[info] shutdown mirage-ecs")
 	select {
 	case err := <-errors:
 		return err
@@ -100,7 +101,7 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 
 	case strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix):
 		msg := fmt.Sprintf("%s is not found", host)
-		log.Println("[warn]", msg)
+		slog.Warn(msg)
 		http.Error(w, msg, http.StatusNotFound)
 
 	default:
@@ -137,7 +138,7 @@ func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup
 		select {
 		case <-tk.C:
 		case <-ctx.Done():
-			log.Println("[debug] RunAccessCountCollector() is done")
+			slog.Warn("RunAccessCountCollector() is done")
 			return
 		}
 		all := m.ReverseProxy.CollectAccessCounts()
