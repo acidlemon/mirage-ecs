@@ -409,7 +409,8 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 
 func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		ok, err := cfg.Auth.Do(c.Request(), c.Response(),
+		req := c.Request()
+		ok, err := cfg.Auth.Do(req, c.Response(),
 			cfg.Auth.ByToken, cfg.Auth.ByAmznOIDC, cfg.Auth.ByBasic,
 		)
 		if err != nil {
@@ -419,6 +420,25 @@ func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc 
 		if !ok {
 			log.Println("[warn] all auth methods failed")
 			return echo.ErrUnauthorized
+		}
+
+		// check origin header
+		if req.Method == http.MethodPost {
+			origin := c.Request().Header.Get("Origin")
+			if origin == "" {
+				log.Printf("[error] missing origin header")
+				return echo.ErrBadRequest
+			}
+			u, err := url.Parse(origin)
+			if err != nil {
+				log.Printf("[error] invalid origin header: %s", origin)
+				return echo.ErrBadRequest
+			}
+			host, _, _ := net.SplitHostPort(u.Host)
+			if host != cfg.Host.WebApi {
+				log.Printf("[error] invalid origin host: %s", u.Host)
+				return echo.ErrBadRequest
+			}
 		}
 
 		cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
@@ -568,17 +588,8 @@ func copyToFile(src io.Reader, dst string) (int64, error) {
 	return io.Copy(f, src)
 }
 
-func (cfg *Config) ValidateOrigin(origin string) error {
-	if origin == "" {
-		return fmt.Errorf("origin required")
+func (cfg *Config) ValidateOriginMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		return next(c)
 	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return fmt.Errorf("invalid origin: %s", origin)
-	}
-	host, _, _ := net.SplitHostPort(u.Host)
-	if host != cfg.Host.WebApi {
-		return fmt.Errorf("invalid origin host: %s", u.Host)
-	}
-	return nil
 }

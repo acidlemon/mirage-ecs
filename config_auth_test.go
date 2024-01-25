@@ -199,11 +199,6 @@ func TestAuthMiddleware(t *testing.T) {
 				case "/api/list":
 					return c.JSON(http.StatusOK, []int{})
 				case "/launch":
-					log.Printf("[debug] origin: %s", c.Request().Header.Get("Origin"))
-					if err := config.ValidateOrigin(c.Request().Header.Get("Origin")); err != nil {
-						log.Printf("[debug] origin validation failed: %s", err)
-						return c.String(http.StatusBadRequest, err.Error())
-					}
 					return c.String(http.StatusOK, "launched")
 				default:
 					return c.String(http.StatusNotFound, "not found")

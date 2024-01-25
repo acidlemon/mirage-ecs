@@ -59,24 +59,25 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	e := echo.New()
 	e.Use(middleware.Logger())
 
-	web := e.Group("/")
+	web := e.Group("")
 	web.Use(cfg.AuthMiddlewareForWeb)
 	web.GET("/", app.Top)
 	web.GET("/list", app.List)
 	web.GET("/launcher", app.Launcher)
+	web.GET("/trace/:taskid", app.Trace)
 	web.POST("/launch", app.Launch)
 	web.POST("/terminate", app.Terminate)
-	web.GET("/trace/:taskid", app.Trace)
 
 	api := e.Group("/api")
 	api.Use(cfg.CompatMiddlewareForAPI)
 	api.Use(cfg.AuthMiddlewareForAPI)
 	api.GET("/list", app.ApiList)
+	api.GET("/access", app.ApiAccess)
+	api.GET("/logs", app.ApiLogs)
 	api.POST("/launch", app.ApiLaunch)
 	api.POST("/terminate", app.ApiTerminate)
 	api.POST("/purge", app.ApiPurge)
-	api.GET("/access", app.ApiAccess)
-	api.GET("/logs", app.ApiLogs)
+
 	e.Renderer = &Template{
 		templates: template.Must(template.ParseGlob(cfg.HtmlDir + "/*")),
 	}
@@ -134,9 +135,6 @@ func (api *WebApi) Launcher(c echo.Context) error {
 }
 
 func (api *WebApi) Launch(c echo.Context) error {
-	if err := api.cfg.ValidateOrigin(c.Request().Header.Get("Origin")); err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
-	}
 	code, err := api.launch(c)
 	if err != nil {
 		return c.String(code, err.Error())
@@ -148,9 +146,6 @@ func (api *WebApi) Launch(c echo.Context) error {
 }
 
 func (api *WebApi) Terminate(c echo.Context) error {
-	if err := api.cfg.ValidateOrigin(c.Request().Header.Get("Origin")); err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
-	}
 	code, err := api.terminate(c)
 	if err != nil {
 		c.String(code, err.Error())
