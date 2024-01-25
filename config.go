@@ -44,6 +44,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 	Auth      *Auth      `yaml:"auth"`
 
+	compatV1  bool
 	localMode bool
 	awscfg    *aws.Config
 	cleanups  []func() error
@@ -191,6 +192,7 @@ type ConfigParams struct {
 	Domain      string
 	LocalMode   bool
 	DefaultPort int
+	CompatV1    bool
 }
 
 type Network struct {
@@ -230,8 +232,10 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		ECS: ECSCfg{
 			Region: os.Getenv("AWS_REGION"),
 		},
+		Auth: nil,
+
 		localMode: p.LocalMode,
-		Auth:      nil,
+		compatV1:  p.CompatV1,
 	}
 
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
@@ -403,18 +407,12 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 	return nil
 }
 
-func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		isAPIRequest := strings.HasPrefix(c.Request().URL.Path, "/api/")
-		runs := []Authorizer{cfg.Auth.ByToken}
-		if !isAPIRequest {
-			// web access allows other auth methods
-			runs = append(runs,
-				cfg.Auth.ByAmznOIDC,
-				cfg.Auth.ByBasic, // basic auth must be evaluated at last
-			)
-		}
-		ok, err := cfg.Auth.Do(c.Request(), c.Response(), runs...)
+		req := c.Request()
+		ok, err := cfg.Auth.Do(req, c.Response(),
+			cfg.Auth.ByToken, cfg.Auth.ByAmznOIDC, cfg.Auth.ByBasic,
+		)
 		if err != nil {
 			log.Println("[error] auth error:", err)
 			return echo.ErrInternalServerError
@@ -424,15 +422,64 @@ func (cfg *Config) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.ErrUnauthorized
 		}
 
-		// set auth cookie for web access
-		if !isAPIRequest {
-			cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
-			if err != nil {
-				log.Println("[error] failed to create auth cookie:", err)
-				return echo.ErrInternalServerError
+		// check origin header
+		if req.Method == http.MethodPost {
+			origin := c.Request().Header.Get("Origin")
+			if origin == "" {
+				log.Printf("[error] missing origin header")
+				return echo.ErrBadRequest
 			}
-			if cookie.Value != "" {
-				c.SetCookie(cookie)
+			u, err := url.Parse(origin)
+			if err != nil {
+				log.Printf("[error] invalid origin header: %s", origin)
+				return echo.ErrBadRequest
+			}
+			host, _, _ := net.SplitHostPort(u.Host)
+			if host != cfg.Host.WebApi {
+				log.Printf("[error] invalid origin host: %s", u.Host)
+				return echo.ErrBadRequest
+			}
+		}
+
+		cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
+		if err != nil {
+			log.Println("[error] failed to create auth cookie:", err)
+			return echo.ErrInternalServerError
+		}
+		if cookie.Value != "" {
+			c.SetCookie(cookie)
+		}
+		return next(c)
+	}
+}
+
+func (cfg *Config) AuthMiddlewareForAPI(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// API allows only token auth
+		ok, err := cfg.Auth.Do(c.Request(), c.Response(), cfg.Auth.ByToken)
+		if err != nil {
+			log.Println("[error] auth error:", err)
+			return echo.ErrInternalServerError
+		}
+		if !ok {
+			log.Println("[warn] all auth methods failed")
+			return echo.ErrUnauthorized
+		}
+		return next(c)
+	}
+}
+
+func (cfg *Config) CompatMiddlewareForAPI(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		req := c.Request()
+		contentType := req.Header.Get("Content-Type")
+		switch cfg.compatV1 {
+		case true:
+			// allows any content type
+		case false:
+			if req.Method == http.MethodPost && !strings.HasPrefix(contentType, "application/json") {
+				log.Printf("[error] invalid content type: %s for %s %s", contentType, req.Method, req.URL.Path)
+				return echo.ErrBadRequest
 			}
 		}
 		return next(c)
@@ -541,17 +588,8 @@ func copyToFile(src io.Reader, dst string) (int64, error) {
 	return io.Copy(f, src)
 }
 
-func (cfg *Config) ValidateOrigin(origin string) error {
-	if origin == "" {
-		return fmt.Errorf("origin required")
+func (cfg *Config) ValidateOriginMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		return next(c)
 	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return fmt.Errorf("invalid origin: %s", origin)
-	}
-	host, _, _ := net.SplitHostPort(u.Host)
-	if host != cfg.Host.WebApi {
-		return fmt.Errorf("invalid origin host: %s", u.Host)
-	}
-	return nil
 }
