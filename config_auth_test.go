@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 	"github.com/labstack/echo/v4"
 )
 
