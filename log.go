@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"path"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -57,6 +59,8 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprint(buf, record.Time.Format(LogTimeFormat))
 	fmt.Fprintf(buf, " [%s]", strings.ToLower(record.Level.String()))
+	frame, _ := runtime.CallersFrames([]uintptr{record.PC}).Next()
+	fmt.Fprintf(buf, " [%s:%d]", path.Base(frame.File), frame.Line)
 	if len(h.preformatted) > 0 {
 		buf.Write(h.preformatted)
 	}
