@@ -57,21 +57,26 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 	app.cfg = cfg
 
 	e := echo.New()
-	e.Use(cfg.AuthMiddleware)
 	e.Use(middleware.Logger())
-	e.GET("/", app.Top)
-	e.GET("/list", app.List)
-	e.GET("/launcher", app.Launcher)
-	e.POST("/launch", app.Launch)
-	e.POST("/terminate", app.Terminate)
-	e.GET("/trace/:taskid", app.Trace)
 
-	e.GET("/api/list", app.ApiList)
-	e.POST("/api/launch", app.ApiLaunch)
-	e.POST("/api/terminate", app.ApiTerminate)
-	e.POST("/api/purge", app.ApiPurge)
-	e.GET("/api/access", app.ApiAccess)
-	e.GET("/api/logs", app.ApiLogs)
+	web := e.Group("/")
+	web.Use(cfg.AuthMiddlewareForWeb)
+	web.GET("/", app.Top)
+	web.GET("/list", app.List)
+	web.GET("/launcher", app.Launcher)
+	web.POST("/launch", app.Launch)
+	web.POST("/terminate", app.Terminate)
+	web.GET("/trace/:taskid", app.Trace)
+
+	api := e.Group("/api")
+	api.Use(cfg.CompatMiddlewareForAPI)
+	api.Use(cfg.AuthMiddlewareForAPI)
+	api.GET("/list", app.ApiList)
+	api.POST("/launch", app.ApiLaunch)
+	api.POST("/terminate", app.ApiTerminate)
+	api.POST("/purge", app.ApiPurge)
+	api.GET("/access", app.ApiAccess)
+	api.GET("/logs", app.ApiLogs)
 	e.Renderer = &Template{
 		templates: template.Must(template.ParseGlob(cfg.HtmlDir + "/*")),
 	}
