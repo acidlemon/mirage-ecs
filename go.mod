@@ -1,6 +1,6 @@
-module github.com/acidlemon/mirage-ecs
+module github.com/acidlemon/mirage-ecs/v2
 
-go 1.18
+go 1.21
 
 require (
 	github.com/ReneKroon/ttlcache/v2 v2.11.0
@@ -13,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.37.0
 	github.com/brunoscheufler/aws-ecs-metadata-go v0.0.0-20221221133751-67e37ae746cd
 	github.com/fujiwara/go-amzn-oidc v0.0.7
+	github.com/fujiwara/tracer v1.0.2
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/logutils v1.0.0
@@ -42,7 +43,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.3 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
-	github.com/fujiwara/tracer v1.0.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/labstack/gommon v0.4.0 // indirect

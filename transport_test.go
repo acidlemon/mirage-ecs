@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 )
 
 func TestRoundTrip(t *testing.T) {

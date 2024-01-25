@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 	"github.com/hashicorp/logutils"
 	"gopkg.in/yaml.v2"
 )

@@ -24,4 +24,4 @@ test:
 	go test -v ./...
 
 install:
-	go install github.com/acidlemon/mirage-ecs/cmd/mirage-ecs
+	go install github.com/acidlemon/mirage-ecs/v2/cmd/mirage-ecs

@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 )
 
 func TestToECSKeyValuePairsAndTags(t *testing.T) {

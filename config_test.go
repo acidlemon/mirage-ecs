@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 )
 
 func TestNewConfig(t *testing.T) {

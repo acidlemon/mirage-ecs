@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	mirageecs "github.com/acidlemon/mirage-ecs"
+	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 )
 
 var e2eRequestsForm = map[string]string{
