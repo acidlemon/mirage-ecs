@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"path"
 	"regexp"
@@ -192,13 +192,13 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	subdomain := r.Subdomain
 	subdomain = strings.ToLower(subdomain)
 	if err := validateSubdomain(subdomain); err != nil {
-		log.Println("[error] launch failed: ", err)
+		slog.Error(f("launch failed: %s", err))
 		return http.StatusBadRequest, err
 	}
 	taskdefs := r.Taskdef
 	parameter, err := api.LoadParameter(r.GetParameter)
 	if err != nil {
-		log.Println("[error] failed to load parameter: ", err)
+		slog.Error(f("failed to load parameter: %s", err))
 		return http.StatusBadRequest, err
 	}
 
@@ -209,7 +209,7 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 		defer cancel()
 		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
 		if err != nil {
-			log.Println("[error] launch failed: ", err)
+			slog.Error(f("launch failed: %s", err))
 			return http.StatusInternalServerError, err
 		}
 	}
@@ -319,7 +319,7 @@ func (api *WebApi) accessCounter(c echo.Context) (int, int64, int64, error) {
 	d := time.Duration(durationInt) * time.Second
 	sum, err := api.runner.GetAccessCount(c.Request().Context(), subdomain, d)
 	if err != nil {
-		log.Println("[error] access counter failed: ", err)
+		slog.Error(f("access counter failed: %s", err))
 		return http.StatusInternalServerError, 0, durationInt, err
 	}
 	return http.StatusOK, sum, durationInt, nil
@@ -382,13 +382,13 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 	di, err := r.Duration.Int64()
 	if err != nil {
 		msg := fmt.Sprintf("invalid duration %s", r.Duration)
-		log.Printf("[error] %s", msg)
+		slog.Error(msg)
 		return http.StatusBadRequest, errors.New(msg)
 	}
 	mininum := int64(PurgeMinimumDuration.Seconds())
 	if di < mininum {
 		msg := fmt.Sprintf("invalid duration %d (at least %d)", di, mininum)
-		log.Printf("[error] %s", msg)
+		slog.Error(msg)
 		return http.StatusBadRequest, errors.New(msg)
 	}
 
@@ -401,7 +401,7 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 		p := strings.SplitN(excludeTag, ":", 2)
 		if len(p) != 2 {
 			msg := fmt.Sprintf("invalid exclude_tags format %s", excludeTag)
-			log.Println("[error]", msg)
+			slog.Error(msg)
 			return http.StatusBadRequest, errors.New(msg)
 		}
 		k, v := p[0], p[1]
@@ -411,10 +411,10 @@ func (api *WebApi) purge(c echo.Context) (int, error) {
 
 	infos, err := api.runner.List(c.Request().Context(), statusRunning)
 	if err != nil {
-		log.Println("[error] list ecs failed: ", err)
+		slog.Error(f("list ecs failed: %s", err))
 		return http.StatusInternalServerError, err
 	}
-	log.Printf("[info] purge subdomains: duration=%s, excludes=%v, exclude_tags=%v", duration, excludes, excludeTags)
+	slog.Info(f("purge subdomains: duration=%s, excludes=%v, exclude_tags=%v", duration, excludes, excludeTags))
 	tm := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
 		if info.ShouldBePurged(duration, excludesMap, excludeTagsMap) {
@@ -434,28 +434,28 @@ func (api *WebApi) purgeSubdomains(ctx context.Context, subdomains []string, dur
 	if api.mu.TryLock() {
 		defer api.mu.Unlock()
 	} else {
-		log.Println("[info] skip purge subdomains, another purge is running")
+		slog.Info("skip purge subdomains, another purge is running")
 		return
 	}
-	log.Printf("[info] start purge subdomains %d", len(subdomains))
+	slog.Info(f("start purge subdomains %d", len(subdomains)))
 	purged := 0
 	for _, subdomain := range subdomains {
 		sum, err := api.runner.GetAccessCount(ctx, subdomain, duration)
 		if err != nil {
-			log.Printf("[warn] access count failed: %s %s", subdomain, err)
+			slog.Warn(f("access count failed: %s %s", subdomain, err))
 			continue
 		}
 		if sum > 0 {
-			log.Printf("[info] skip purge %s %d access", subdomain, sum)
+			slog.Info(f("skip purge %s %d access", subdomain, sum))
 			continue
 		}
 		if err := api.runner.TerminateBySubdomain(ctx, subdomain); err != nil {
-			log.Printf("[warn] terminate failed %s %s", subdomain, err)
+			slog.Warn(f("terminate failed %s %s", subdomain, err))
 		} else {
 			purged++
-			log.Printf("[info] purged %s", subdomain)
+			slog.Info(f("purged %s", subdomain))
 		}
 		time.Sleep(3 * time.Second)
 	}
-	log.Printf("[info] purge %d subdomains completed", purged)
+	slog.Info(f("purge %d subdomains completed", purged))
 }

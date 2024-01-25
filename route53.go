@@ -3,7 +3,7 @@ package mirageecs
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
@@ -48,7 +48,7 @@ func NewRoute53(ctx context.Context, cfg *Config) *Route53 {
 			Id: aws.String(id),
 		})
 		if err != nil {
-			log.Println("[error] failed to get hosted zone", err)
+			slog.Error(f("failed to get hosted zone %s", err))
 			return nil
 		}
 		r.zoneName = *out.HostedZone.Name
@@ -71,12 +71,12 @@ func (r *Route53) Add(name, addr string) {
 	}
 	key := change.String()
 	if _, err := r.cache.Get(key); err == nil {
-		log.Printf("[debug] %s is cached. skip", key)
+		slog.Debug(f("%s is cached. skip", key))
 		return
 	}
 	r.cache.Set(key, nil)
 
-	log.Println("[debug] route53 change:", change.String())
+	slog.Debug(f("route53 change: %s", change.String()))
 	r.changes = append(r.changes, change)
 }
 
@@ -91,12 +91,12 @@ func (r *Route53) Delete(name string, addr string) {
 	}
 	key := change.String()
 	if _, err := r.cache.Get(key); err == nil {
-		log.Printf("[debug] %s is cached. skip", key)
+		slog.Debug(f("%s is cached. skip", key))
 		return
 	}
 	r.cache.Set(key, nil)
 
-	log.Println("[debug] route53 change:", change.String())
+	slog.Debug(f("route53 change: %s", change.String()))
 	r.changes = append(r.changes, change)
 }
 
@@ -140,7 +140,7 @@ DELETES:
 			},
 		}
 		changes = append(changes, change)
-		log.Printf("[info] route53 change: %v", change)
+		slog.Info(f("route53 change: %v", change))
 	}
 	for name, cs := range addes {
 		var records []types.ResourceRecord
@@ -157,7 +157,7 @@ DELETES:
 			},
 		}
 		changes = append(changes, change)
-		log.Printf("[info] route53 change: %v", change)
+		slog.Info(f("route53 change: %v", change))
 	}
 
 	_, err := r.svc.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
@@ -169,6 +169,6 @@ DELETES:
 	if err != nil {
 		return err
 	}
-	log.Printf("[info] route53 ChangeResourceRecordSets complete with %d changes", len(changes))
+	slog.Info(f("route53 ChangeResourceRecordSets complete with %d changes", len(changes)))
 	return nil
 }

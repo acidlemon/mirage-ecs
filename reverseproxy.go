@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -48,7 +48,7 @@ func NewReverseProxy(cfg *Config) *ReverseProxy {
 	if cfg.localMode {
 		unit = time.Second * 10
 		proxyHandlerLifetime = time.Hour * 24 * 365 * 10 // not expire
-		log.Printf("[info] local mode: access counter unit=%s", unit)
+		slog.Info(f("local mode: access counter unit=%s", unit))
 	}
 	return &ReverseProxy{
 		cfg:               cfg,
@@ -62,10 +62,10 @@ func (r *ReverseProxy) ServeHTTPWithPort(w http.ResponseWriter, req *http.Reques
 	subdomain := strings.ToLower(strings.Split(req.Host, ".")[0])
 
 	if handler := r.FindHandler(subdomain, port); handler != nil {
-		log.Printf("[debug] proxy handler found for subdomain %s", subdomain)
+		slog.Debug(f("proxy handler found for subdomain %s", subdomain))
 		handler.ServeHTTP(w, req)
 	} else {
-		log.Printf("[warn] proxy handler not found for subdomain %s", subdomain)
+		slog.Debug(f("proxy handler not found for subdomain %s", subdomain))
 		http.NotFound(w, req)
 	}
 }
@@ -96,7 +96,7 @@ func (r *ReverseProxy) Subdomains() []string {
 func (r *ReverseProxy) FindHandler(subdomain string, port int) http.Handler {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	log.Printf("[debug] FindHandler for %s:%d", subdomain, port)
+	slog.Debug(f("FindHandler for %s:%d", subdomain, port))
 
 	proxyHandlers, ok := r.domainMap[subdomain]
 	if !ok {
@@ -155,7 +155,7 @@ func (ph proxyHandlers) Handler(port int) (http.Handler, bool) {
 			// return first (randomized by Go's map)
 			return handler.handler, true
 		} else {
-			log.Printf("[info] proxy handler to %s is dead", ipaddress)
+			slog.Info(f("proxy handler to %s is dead", ipaddress))
 			delete(ph[port], ipaddress)
 		}
 	}
@@ -169,11 +169,11 @@ func (ph proxyHandlers) exists(port int, addr string) bool {
 	if h := ph[port][addr]; h == nil {
 		return false
 	} else if h.alive() {
-		log.Printf("[debug] proxy handler to %s extends lifetime", addr)
+		slog.Debug(f("proxy handler to %s extends lifetime", addr))
 		h.extend()
 		return true
 	} else {
-		log.Printf("[info] proxy handler to %s is dead", addr)
+		slog.Info(f("proxy handler to %s is dead", addr))
 		delete(ph[port], addr)
 		return false
 	}
@@ -183,7 +183,7 @@ func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 	if ph[port] == nil {
 		ph[port] = make(map[string]*proxyHandler)
 	}
-	log.Printf("[info] new proxy handler to %s", ipaddress)
+	slog.Info(f("new proxy handler to %s", ipaddress))
 	ph[port][ipaddress] = newProxyHandler(h)
 }
 
@@ -191,7 +191,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	addr := net.JoinHostPort(ipaddress, strconv.Itoa(targetPort))
-	log.Printf("[debug] AddSubdomain %s -> %s", subdomain, addr)
+	slog.Debug(f("AddSubdomain %s -> %s", subdomain, addr))
 	var ph proxyHandlers
 	if _ph, exists := r.domainMap[subdomain]; exists {
 		ph = _ph
@@ -221,7 +221,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		destUrlString := "http://" + addr
 		destUrl, err := url.Parse(destUrlString)
 		if err != nil {
-			log.Printf("[error] invalid destination url: %s %s", destUrlString, err)
+			slog.Error(f("invalid destination url: %s %s", destUrlString, err))
 			continue
 		}
 		handler := rproxy.NewSingleHostReverseProxy(destUrl)
@@ -237,10 +237,10 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		handler.Transport = tp
 		ph.add(v.ListenPort, addr, handler)
 		proxy = true
-		log.Printf("[info] add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr)
+		slog.Info(f("add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr))
 	}
 	if !proxy {
-		log.Printf("[warn] proxy of subdomain %s(target port %d) is not created. define target port in listen.http[]", subdomain, targetPort)
+		slog.Warn(f("proxy of subdomain %s(target port %d) is not created. define target port in listen.http[]", subdomain, targetPort))
 		return
 	}
 
@@ -256,7 +256,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 func (r *ReverseProxy) RemoveSubdomain(subdomain string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Println("[info] removing subdomain:", subdomain)
+	slog.Info(f("removing subdomain: %s", subdomain))
 	delete(r.domainMap, subdomain)
 	delete(r.accessCounters, subdomain)
 	for i, name := range r.domains {
@@ -274,7 +274,7 @@ func (r *ReverseProxy) Modify(action *proxyControl) {
 	case proxyRemove:
 		r.RemoveSubdomain(action.Subdomain)
 	default:
-		log.Printf("[error] unknown proxy action: %s", action.Action)
+		slog.Error(f("unknown proxy action: %s", action.Action))
 	}
 }
 
@@ -299,18 +299,18 @@ type Transport struct {
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.Counter.Add()
 
-	log.Printf("[debug] subdomain %s %s roundtrip", t.Subdomain, req.URL)
+	slog.Debug(f("subdomain %s %s roundtrip", t.Subdomain, req.URL))
 	// OPTIONS request is not authenticated because it is preflighted.
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests
 	if t.AuthCookieValidateFunc != nil && req.Method != http.MethodOptions {
-		log.Printf("[debug] subdomain %s %s roundtrip: require auth cookie", t.Subdomain, req.URL)
+		slog.Debug(f("subdomain %s %s roundtrip: require auth cookie", t.Subdomain, req.URL))
 		cookie, err := req.Cookie(AuthCookieName)
 		if err != nil || cookie == nil {
-			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+			slog.Warn(f("subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err))
 			return newForbiddenResponse(), nil
 		}
 		if err := t.AuthCookieValidateFunc(cookie); err != nil {
-			log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+			slog.Warn(f("subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err))
 			return newForbiddenResponse(), nil
 		}
 	}
@@ -323,7 +323,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err == nil {
 		return resp, nil
 	}
-	log.Printf("[warn] subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err)
+	slog.Warn(f("subdomain %s %s roundtrip failed: %s", t.Subdomain, req.URL, err))
 
 	// timeout
 	if ctx.Err() == context.DeadlineExceeded {

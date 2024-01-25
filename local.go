@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,7 +53,7 @@ func (e *LocalTaskRunner) Trace(_ context.Context, id string) (string, error) {
 
 func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
 	if info, ok := e.find(subdomain); ok {
-		log.Printf("[info] subdomain %s is already running task id %s. Terminating...", subdomain, info.ShortID)
+		slog.Info(f("subdomain %s is already running task id %s. Terminating...", subdomain, info.ShortID))
 		err := e.TerminateBySubdomain(ctx, subdomain)
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 	}
 	id := generateRandomHexID(32)
 	env := option.ToEnv(subdomain, e.cfg.Parameter)
-	log.Printf("[info] Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id)
+	slog.Info(f("Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id))
 	contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
 	port, stopServerFunc := runMockServer(contents)
 	e.Informations = append(e.Informations, &Information{
@@ -113,7 +113,7 @@ func (e *LocalTaskRunner) find(subdomain string) (*Information, bool) {
 }
 
 func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
-	log.Printf("[info] Terminating a mock task: subdomain=%s", subdomain)
+	slog.Info(f("Terminating a mock task: subdomain=%s", subdomain))
 	if info, ok := e.find(subdomain); ok {
 		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
 			stop()
@@ -145,18 +145,18 @@ func runMockServer(content string) (int, func()) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, content)
 	}))
-	log.Println("[info] mock server is running at", ts.URL)
+	slog.Info(f("mock server is running at %s", ts.URL))
 	u, _ := url.Parse(ts.URL)
 	port, _ := strconv.Atoi(u.Port())
 	return port, ts.Close
 }
 
 func (e *LocalTaskRunner) GetAccessCount(_ context.Context, subdomain string, duration time.Duration) (int64, error) {
-	log.Println("[debug] GetAccessCount is not implemented in LocalTaskRunner")
+	slog.Debug("GetAccessCount is not implemented in LocalTaskRunner")
 	return 0, nil
 }
 
 func (e *LocalTaskRunner) PutAccessCounts(_ context.Context, _ map[string]accessCount) error {
-	log.Println("[debug] PutAccessCounts is not implemented in LocalTaskRunner")
+	slog.Debug("PutAccessCounts is not implemented in LocalTaskRunner")
 	return nil
 }

@@ -2,7 +2,6 @@ package mirageecs_test
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -192,7 +191,6 @@ func TestAuthMiddleware(t *testing.T) {
 			e := echo.New()
 			handler := func(c echo.Context) error {
 				p := c.Request().URL.Path
-				log.Printf("[debug] handler called %s", p)
 				switch p {
 				case "/":
 					return c.String(http.StatusOK, "ok")

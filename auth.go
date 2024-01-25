@@ -3,7 +3,7 @@ package mirageecs
 import (
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -31,10 +31,10 @@ func (a *Auth) ByBasic(req *http.Request, res http.ResponseWriter) (bool, error)
 		return false, nil
 	}
 	if ok := a.Basic.Match(req.Header); ok {
-		log.Println("[debug] basic auth succeeded")
+		slog.Debug("basic auth succeeded")
 		return ok, nil
 	} else {
-		log.Println("[debug] basic auth failed. set WWW-Authenticate header")
+		slog.Debug("basic auth failed. set WWW-Authenticate header")
 		res.Header().Set("WWW-Authenticate", "Basic realm=\"Restricted\"")
 	}
 	return false, nil
@@ -45,10 +45,10 @@ func (a *Auth) ByToken(req *http.Request, res http.ResponseWriter) (bool, error)
 		return false, nil
 	}
 	if ok := a.Token.Match(req.Header); ok {
-		log.Println("[debug] token auth succeeded")
+		slog.Debug("token auth succeeded")
 		return ok, nil
 	}
-	log.Println("[debug] token auth failed")
+	slog.Debug("token auth failed")
 	return false, nil
 }
 
@@ -59,10 +59,10 @@ func (a *Auth) ByAmznOIDC(req *http.Request, res http.ResponseWriter) (bool, err
 	if ok, err := a.AmznOIDC.Match(req.Header); err != nil {
 		return false, err
 	} else if ok {
-		log.Println("[debug] amzn_oidc auth succeeded")
+		slog.Debug("amzn_oidc auth succeeded")
 		return true, nil
 	}
-	log.Println("[debug] amzn_oidc auth failed")
+	slog.Debug("amzn_oidc auth failed")
 	return false, nil
 }
 
@@ -149,19 +149,19 @@ func (b *AuthMethodBasic) Match(h http.Header) bool {
 	if b == nil {
 		return false
 	}
-	log.Println("[debug] auth basic", b.Username, b.Password)
+	slog.Debug(f("auth basic %s %s", b.Username, b.Password))
 	if b.Username == "" || b.Password == "" || h.Get("Authorization") == "" {
 		return false
 	}
 	b.gen.Do(func() {
 		b.expected = "Basic " + base64.StdEncoding.EncodeToString([]byte(b.Username+":"+b.Password))
 	})
-	log.Println("[debug] auth basic comparing", b.Username, b.Password, h.Get("Authorization"))
+	slog.Debug(f("auth basic comparing %s %s %s", b.Username, b.Password, h.Get("Authorization")))
 	if h.Get("Authorization") == b.expected {
-		log.Println("[debug] auth basic succeeded")
+		slog.Debug(f("auth basic succeeded"))
 		return true
 	}
-	log.Printf("[warn] auth basic failed")
+	slog.Warn("auth basic failed")
 	return false
 }
 
@@ -178,12 +178,12 @@ func (b *AuthMethodToken) Match(h http.Header) bool {
 	if b.Token == "" || sent == "" {
 		return false
 	}
-	log.Println("[debug] auth token comparing", b.Header, b.Token, sent)
+	slog.Debug(f("auth token comparing %s %s %s", b.Header, b.Token, sent))
 	if b.Token == sent {
-		log.Println("[debug] auth token succeeded")
+		slog.Debug("auth token succeeded")
 		return true
 	}
-	log.Printf("[warn] auth token (header=%s) does not match", b.Header)
+	slog.Warn(f("auth token (header=%s) does not match", b.Header))
 	return false
 }
 
@@ -199,7 +199,7 @@ func (a *AuthMethodAmznOIDC) Match(h http.Header) (bool, error) {
 	if a.Claim == "" {
 		return false, nil
 	}
-	log.Printf("[debug] auth amzn_oidc comparing %s with %s", a.Claim, h.Get("x-amzn-oidc-data"))
+	slog.Debug(f("auth amzn_oidc comparing %s with %s", a.Claim, h.Get("x-amzn-oidc-data")))
 	claims, err := validator.Validate(h.Get("x-amzn-oidc-data"))
 	if err != nil {
 		return false, fmt.Errorf("failed to validate x-amzn-oidc-data: %s", err)
@@ -210,22 +210,22 @@ func (a *AuthMethodAmznOIDC) Match(h http.Header) (bool, error) {
 func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]interface{}) bool {
 	v, ok := claims[a.Claim]
 	if !ok {
-		log.Printf("[warn] auth amzn_oidc claim[%s] not found in claims", a.Claim)
+		slog.Warn(f("auth amzn_oidc claim[%s] not found in claims", a.Claim))
 		return false
 	}
 	vs, ok := v.(string)
 	if !ok {
-		log.Printf("[warn] auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v)
+		slog.Warn(f("auth amzn_oidc claim[%s] is not a string: %v", a.Claim, v))
 		return false
 	}
 	for _, m := range a.Matchers {
 		if m.Match(vs) {
-			log.Printf("[debug] auth amzn_oidc claim[%s]=%s matches %#v", a.Claim, v, m)
+			slog.Debug(f("auth amzn_oidc claim[%s]=%s matches %#v", a.Claim, v, m))
 			return true
 		}
-		log.Printf("[debug] auth amzn_oidc claim[%s]=%s does not match %#v", a.Claim, v, m)
+		slog.Debug(f("auth amzn_oidc claim[%s]=%s does not match %#v", a.Claim, v, m))
 	}
-	log.Printf("[warn] auth amzn_oidc claim[%s]=%s does not match any matchers", a.Claim, vs)
+	slog.Warn(f("auth amzn_oidc claim[%s]=%s does not match any matchers", a.Claim, vs))
 	return false
 }
 

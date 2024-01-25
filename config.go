@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -257,7 +256,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	}
 
 	if p.Path == "" {
-		log.Println("[info] no config file specified, using default config with domain suffix: ", domain)
+		slog.Info(f("no config file specified, using default config with domain suffix: %s", domain))
 	} else {
 		var content []byte
 		var err error
@@ -269,7 +268,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot load config: %s: %w", p.Path, err)
 		}
-		log.Printf("[info] loading config file: %s", p.Path)
+		slog.Info(f("loading config file: %s", p.Path))
 		if err := config.LoadWithEnvBytes(&cfg, content); err != nil {
 			return nil, fmt.Errorf("cannot load config: %s: %w", p.Path, err)
 		}
@@ -303,17 +302,17 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	}
 
 	if cfg.localMode {
-		log.Println("[info] local mode: setting host suffix to .localtest.me")
+		slog.Info("local mode: setting host suffix to .localtest.me")
 		cfg.Host.ReverseProxySuffix = ".localtest.me"
 		cfg.Host.WebApi = "mirage.localtest.me"
-		log.Printf("[info] You can access to http://mirage.localtest.me:%d/", cfg.Listen.HTTP[0].ListenPort)
+		slog.Info(f("You can access to http://mirage.localtest.me:%d/", cfg.Listen.HTTP[0].ListenPort))
 	}
 
 	cfg.ECS.capacityProviderStrategy = cfg.ECS.CapacityProviderStrategy.toSDK()
 	cfg.ECS.networkConfiguration = cfg.ECS.NetworkConfiguration.toSDK()
 
 	if err := cfg.fillECSDefaults(ctx); err != nil {
-		log.Printf("[warn] failed to fill ECS defaults: %s", err)
+		slog.Warn(f("failed to fill ECS defaults: %s", err))
 	}
 	return cfg, nil
 }
@@ -321,7 +320,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 func (c *Config) Cleanup() {
 	for _, fn := range c.cleanups {
 		if err := fn(); err != nil {
-			log.Println("[warn] failed to cleanup", err)
+			slog.Warn(f("failed to cleanup %s", err))
 		}
 	}
 }
@@ -336,29 +335,29 @@ func (c *Config) NewTaskRunner() TaskRunner {
 
 func (c *Config) fillECSDefaults(ctx context.Context) error {
 	if c.localMode {
-		log.Println("[info] ECS config is not used in local mode")
+		slog.Info("ECS config is not used in local mode")
 		return nil
 	}
 	defer func() {
 		if err := c.ECS.validate(); err != nil {
-			log.Printf("[error] invalid ECS config: %s", c.ECS)
-			log.Printf("[error] ECS config is invalid '%s', so you may not be able to launch ECS tasks", err)
+			slog.Error(f("invalid ECS config: %s", c.ECS))
+			slog.Error(f("ECS config is invalid '%s', so you may not be able to launch ECS tasks", err))
 		} else {
-			log.Printf("[info] built ECS config: %s", c.ECS)
+			slog.Info(f("built ECS config: %s", c.ECS))
 		}
 	}()
 	if c.ECS.Region == "" {
 		c.ECS.Region = os.Getenv("AWS_REGION")
-		log.Printf("[info] AWS_REGION is not set, using region=%s", c.ECS.Region)
+		slog.Info(f("AWS_REGION is not set, using region=%s", c.ECS.Region))
 	}
 	if c.ECS.LaunchType == nil && c.ECS.CapacityProviderStrategy == nil {
 		launchType := "FARGATE"
 		c.ECS.LaunchType = &launchType
-		log.Printf("[info] launch_type and capacity_provider_strategy are not set, using launch_type=%s", *c.ECS.LaunchType)
+		slog.Info(f("launch_type and capacity_provider_strategy are not set, using launch_type=%s", *c.ECS.LaunchType))
 	}
 	if c.ECS.EnableExecuteCommand == nil {
 		c.ECS.EnableExecuteCommand = aws.Bool(true)
-		log.Printf("[info] enable_execute_command is not set, using enable_execute_command=%t", *c.ECS.EnableExecuteCommand)
+		slog.Info(f("enable_execute_command is not set, using enable_execute_command=%t", *c.ECS.EnableExecuteCommand))
 	}
 
 	meta, err := metadata.Get(ctx, &http.Client{})
@@ -372,7 +371,7 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 			}
 		*/
 	}
-	log.Printf("[debug] task metadata: %v", meta)
+	slog.Debug(f("task metadata: %v", meta))
 	var cluster, taskArn, service string
 	switch m := meta.(type) {
 	case *metadata.TaskMetadataV3:
@@ -383,7 +382,7 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		taskArn = m.TaskARN
 	}
 	if c.ECS.Cluster == "" && cluster != "" {
-		log.Printf("[info] ECS cluster is set from task metadata: %s", cluster)
+		slog.Info(f("ECS cluster is set from task metadata: %s", cluster))
 		c.ECS.Cluster = cluster
 	}
 
@@ -413,7 +412,7 @@ func (c *Config) fillECSDefaults(ctx context.Context) error {
 		}
 		if c.ECS.networkConfiguration == nil {
 			c.ECS.networkConfiguration = out.Services[0].NetworkConfiguration
-			log.Printf("[info] network_configuration is not set, using network_configuration=%v", c.ECS.networkConfiguration)
+			slog.Info(f("network_configuration is not set, using network_configuration=%v", c.ECS.networkConfiguration))
 		}
 	}
 	return nil
@@ -426,11 +425,11 @@ func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc 
 			cfg.Auth.ByToken, cfg.Auth.ByAmznOIDC, cfg.Auth.ByBasic,
 		)
 		if err != nil {
-			log.Println("[error] auth error:", err)
+			slog.Error(f("auth error: %s", err))
 			return echo.ErrInternalServerError
 		}
 		if !ok {
-			log.Println("[warn] all auth methods failed")
+			slog.Warn("all auth methods failed")
 			return echo.ErrUnauthorized
 		}
 
@@ -438,24 +437,24 @@ func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc 
 		if req.Method == http.MethodPost {
 			origin := c.Request().Header.Get("Origin")
 			if origin == "" {
-				log.Printf("[error] missing origin header")
+				slog.Error("missing origin header")
 				return echo.ErrBadRequest
 			}
 			u, err := url.Parse(origin)
 			if err != nil {
-				log.Printf("[error] invalid origin header: %s", origin)
+				slog.Error(f("invalid origin header: %s", origin))
 				return echo.ErrBadRequest
 			}
 			host, _, _ := net.SplitHostPort(u.Host)
 			if host != cfg.Host.WebApi {
-				log.Printf("[error] invalid origin host: %s", u.Host)
+				slog.Error(f("invalid origin host: %s", u.Host))
 				return echo.ErrBadRequest
 			}
 		}
 
 		cookie, err := cfg.Auth.NewAuthCookie(AuthCookieExpire, cfg.Host.ReverseProxySuffix)
 		if err != nil {
-			log.Println("[error] failed to create auth cookie:", err)
+			slog.Error(f("failed to create auth cookie: %s", err))
 			return echo.ErrInternalServerError
 		}
 		if cookie.Value != "" {
@@ -470,11 +469,11 @@ func (cfg *Config) AuthMiddlewareForAPI(next echo.HandlerFunc) echo.HandlerFunc 
 		// API allows only token auth
 		ok, err := cfg.Auth.Do(c.Request(), c.Response(), cfg.Auth.ByToken)
 		if err != nil {
-			log.Println("[error] auth error:", err)
+			slog.Error(f("auth error: %s", err))
 			return echo.ErrInternalServerError
 		}
 		if !ok {
-			log.Println("[warn] all auth methods failed")
+			slog.Warn(f("all auth methods failed"))
 			return echo.ErrUnauthorized
 		}
 		return next(c)
@@ -490,7 +489,7 @@ func (cfg *Config) CompatMiddlewareForAPI(next echo.HandlerFunc) echo.HandlerFun
 			// allows any content type
 		case false:
 			if req.Method == http.MethodPost && !strings.HasPrefix(contentType, "application/json") {
-				log.Printf("[error] invalid content type: %s for %s %s", contentType, req.Method, req.URL.Path)
+				slog.Error(f("invalid content type: %s for %s %s", contentType, req.Method, req.URL.Path))
 				return echo.ErrBadRequest
 			}
 		}
@@ -530,7 +529,7 @@ func loadFromS3(ctx context.Context, awscfg *aws.Config, u string) ([]byte, erro
 }
 
 func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
-	log.Printf("[info] downloading html files from %s", c.HtmlDir)
+	slog.Info(f("downloading html files from %s", c.HtmlDir))
 	tmpdir, err := os.MkdirTemp("", "mirage-ecs-htmldir-")
 	if err != nil {
 		return err
@@ -548,7 +547,7 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
 	if !strings.HasSuffix(keyPrefix, "/") {
 		keyPrefix += "/"
 	}
-	log.Println("[debug] bucket:", bucket, "keyPrefix:", keyPrefix)
+	slog.Debug(f("bucket: %s keyPrefix: %s", bucket, keyPrefix))
 	res, err := svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(bucket),
 		Prefix:    aws.String(keyPrefix),
@@ -563,7 +562,7 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
 	}
 	files := 0
 	for _, obj := range res.Contents {
-		log.Printf("[info] downloading %s", aws.ToString(obj.Key))
+		slog.Info(f("downloading %s", aws.ToString(obj.Key)))
 		r, err := svc.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    obj.Key,
@@ -578,16 +577,16 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
 			return err
 		} else {
 			files++
-			log.Printf("[info] downloaded %s (%d bytes)", file, size)
+			slog.Info(f("downloaded %s (%d bytes)", file, size))
 		}
 	}
-	log.Printf("[info] downloaded %d files from %s", files, c.HtmlDir)
+	slog.Info(f("downloaded %d files from %s", files, c.HtmlDir))
 	c.HtmlDir = tmpdir
 	c.cleanups = append(c.cleanups, func() error {
-		log.Printf("[info] removing %s", tmpdir)
+		slog.Info(f("removing %s", tmpdir))
 		return os.RemoveAll(tmpdir)
 	})
-	log.Printf("[debug] setting html dir: %s", c.HtmlDir)
+	slog.Info(f("setting html dir: %s", c.HtmlDir))
 	return nil
 }
 
