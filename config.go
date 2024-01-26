@@ -239,7 +239,8 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		compatV1:  p.CompatV1,
 	}
 	opt := &slog.HandlerOptions{
-		Level: LogLevel,
+		Level:     LogLevel,
+		AddSource: true,
 	}
 
 	switch p.LogFormat {
@@ -247,6 +248,8 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		slog.SetDefault(slog.New(NewLogHandler(os.Stderr, opt)))
 	case "json":
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, opt)))
+	default:
+		return nil, fmt.Errorf("invalid log format (text or json): %s", p.LogFormat)
 	}
 
 	if awscfg, err := awsv2Config.LoadDefaultConfig(ctx, awsv2Config.WithRegion(cfg.ECS.Region)); err != nil {
