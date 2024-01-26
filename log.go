@@ -16,6 +16,10 @@ const LogTimeFormat = "2006-01-02T15:04:05.999Z07:00"
 
 var LogLevel = new(slog.LevelVar)
 
+func init() {
+	LogLevel.Set(slog.LevelInfo)
+}
+
 func f(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
@@ -31,8 +35,7 @@ func SetLogLevel(l string) {
 	case "error":
 		LogLevel.Set(slog.LevelError)
 	default:
-		slog.Warn(f("invalid log level %s. using info", l))
-		LogLevel.Set(slog.LevelInfo)
+		slog.Warn(f("invalid log level %s. ignored", l))
 	}
 }
 
