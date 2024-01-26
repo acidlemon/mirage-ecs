@@ -48,7 +48,7 @@ func NewReverseProxy(cfg *Config) *ReverseProxy {
 	if cfg.localMode {
 		unit = time.Second * 10
 		proxyHandlerLifetime = time.Hour * 24 * 365 * 10 // not expire
-		slog.Info(f("local mode: access counter unit=%s", unit))
+		slog.Debug(f("local mode: access counter unit=%s", unit))
 	}
 	return &ReverseProxy{
 		cfg:               cfg,

@@ -244,7 +244,7 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	}
 
 	switch p.LogFormat {
-	case "text":
+	case "text", "":
 		slog.SetDefault(slog.New(NewLogHandler(os.Stderr, opt)))
 	case "json":
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, opt)))
