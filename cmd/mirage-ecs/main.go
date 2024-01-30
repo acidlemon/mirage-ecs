@@ -4,14 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
 	mirageecs "github.com/acidlemon/mirage-ecs/v2"
-	"github.com/hashicorp/logutils"
 	"gopkg.in/yaml.v2"
 )
 
@@ -25,29 +24,24 @@ func main() {
 	domain := flag.String("domain", ".local", "reverse proxy suffix")
 	var showVersion, showConfig, localMode, compatV1 bool
 	var defaultPort int
+	var logFormat, logLevel string
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.BoolVar(&showConfig, "x", false, "show config")
 	flag.BoolVar(&localMode, "local", false, "local mode (for development)")
 	flag.BoolVar(&compatV1, "compat-v1", false, "compatibility mode for v1")
 	flag.IntVar(&defaultPort, "default-port", 80, "default port number")
-	logLevel := flag.String("log-level", "info", "log level (trace, debug, info, warn, error)")
+	flag.StringVar(&logFormat, "log-format", "text", "log format (text, json)")
+	flag.StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 	flag.VisitAll(overrideWithEnv)
 	flag.Parse()
+
+	mirageecs.SetLogLevel(logLevel)
 
 	if showVersion {
 		fmt.Printf("mirage-ecs %s (%s)\n", Version, buildDate)
 		return
 	}
-
-	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"trace", "debug", "info", "warn", "error"},
-		MinLevel: logutils.LogLevel(*logLevel),
-		Writer:   os.Stderr,
-	}
-	log.SetOutput(filter)
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-	log.Printf("[debug] setting log level: %s", *logLevel)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -58,19 +52,20 @@ func main() {
 		Domain:      *domain,
 		DefaultPort: defaultPort,
 		CompatV1:    compatV1,
+		LogFormat:   logFormat,
 	})
 	if err != nil {
-		log.Fatalf("[error] %s", err)
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 	if showConfig {
 		yaml.NewEncoder(os.Stdout).Encode(cfg)
 		return
 	}
 	mirageecs.Version = Version
-	log.Println("[info] mirage-ecs version:", mirageecs.Version)
 	app := mirageecs.New(ctx, cfg)
 	if err := app.Run(ctx); err != nil {
-		log.Println("[error]", err)
+		slog.Error(err.Error())
 		os.Exit(1)
 	}
 }

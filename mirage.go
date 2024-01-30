@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"sort"
@@ -53,7 +53,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 			laddr := fmt.Sprintf("%s:%d", m.Config.Listen.ForeignAddress, port)
 			listener, err := net.Listen("tcp", laddr)
 			if err != nil {
-				log.Printf("[error] cannot listen %s: %s", laddr, err)
+				slog.Error(f("cannot listen %s: %s", laddr, err))
 				errors <- err
 				cancel()
 				return
@@ -63,13 +63,13 @@ func (m *Mirage) Run(ctx context.Context) error {
 			mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 				m.ServeHTTPWithPort(w, req, port)
 			})
-			log.Println("[info] listen addr:", laddr)
+			slog.Info(f("listen addr: %s", laddr))
 			srv := &http.Server{
 				Handler: mux,
 			}
 			go srv.Serve(listener)
 			<-ctx.Done()
-			log.Println("[info] shutdown server:", laddr)
+			slog.Info(f("shutdown server: %s", laddr))
 			srv.Shutdown(ctx)
 		}(v.ListenPort)
 	}
@@ -78,7 +78,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 	go m.syncECSToMirage(ctx, &wg)
 	go m.RunAccessCountCollector(ctx, &wg)
 	wg.Wait()
-	log.Println("[info] shutdown mirage-ecs")
+	slog.Info("shutdown mirage-ecs")
 	select {
 	case err := <-errors:
 		return err
@@ -100,7 +100,7 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 
 	case strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix):
 		msg := fmt.Sprintf("%s is not found", host)
-		log.Println("[warn]", msg)
+		slog.Warn(msg)
 		http.Error(w, msg, http.StatusNotFound)
 
 	default:
@@ -137,12 +137,12 @@ func (m *Mirage) RunAccessCountCollector(ctx context.Context, wg *sync.WaitGroup
 		select {
 		case <-tk.C:
 		case <-ctx.Done():
-			log.Println("[debug] RunAccessCountCollector() is done")
+			slog.Warn("RunAccessCountCollector() is done")
 			return
 		}
 		all := m.ReverseProxy.CollectAccessCounts()
 		s, _ := json.Marshal(all)
-		log.Printf("[info] access counters: %s", string(s))
+		slog.Info(f("access counters: %s", string(s)))
 		m.runner.PutAccessCounts(ctx, all)
 	}
 }
@@ -155,7 +155,7 @@ const (
 
 func (app *Mirage) syncECSToMirage(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Done()
-	log.Println("[debug] starting up syncECSToMirage()")
+	slog.Debug("starting up syncECSToMirage()")
 	rp := app.ReverseProxy
 	r53 := app.Route53
 	ticker := time.NewTicker(time.Second * 10)
@@ -165,18 +165,18 @@ SYNC:
 	for {
 		select {
 		case msg := <-app.proxyControlCh:
-			log.Printf("[debug] proxyControl %#v", msg)
+			slog.Debug(f("proxyControl %#v", msg))
 			rp.Modify(msg)
 			continue SYNC
 		case <-ticker.C:
 		case <-ctx.Done():
-			log.Println("[debug] syncECSToMirage() is done")
+			slog.Debug("syncECSToMirage() is done")
 			return
 		}
 
 		running, err := app.runner.List(ctx, statusRunning)
 		if err != nil {
-			log.Println("[warn]", err)
+			slog.Warn(err.Error())
 			continue
 		}
 		sort.SliceStable(running, func(i, j int) bool {
@@ -184,7 +184,7 @@ SYNC:
 		})
 		available := make(map[string]bool)
 		for _, info := range running {
-			log.Println("[debug] ruuning task", info.ID)
+			slog.Debug(f("ruuning task %s", info.ID))
 			if info.IPAddress != "" {
 				available[info.SubDomain] = true
 				for name, port := range info.PortMap {
@@ -196,11 +196,11 @@ SYNC:
 
 		stopped, err := app.runner.List(ctx, statusStopped)
 		if err != nil {
-			log.Println("[warn]", err)
+			slog.Warn(err.Error())
 			continue
 		}
 		for _, info := range stopped {
-			log.Println("[debug] stopped task", info.ID)
+			slog.Debug(f("stopped task %s", info.ID))
 			for name := range info.PortMap {
 				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
 			}
@@ -212,7 +212,7 @@ SYNC:
 			}
 		}
 		if err := r53.Apply(ctx); err != nil {
-			log.Println("[warn]", err)
+			slog.Warn(err.Error())
 		}
 	}
 }

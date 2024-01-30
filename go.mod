@@ -16,7 +16,6 @@ require (
 	github.com/fujiwara/tracer v1.0.2
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/google/go-cmp v0.5.9
-	github.com/hashicorp/logutils v1.0.0
 	github.com/kayac/go-config v0.7.0
 	github.com/labstack/echo/v4 v4.11.1
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
