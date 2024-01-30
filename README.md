@@ -559,13 +559,19 @@ parameters:
     required: false
 ```
 
-mirage-ecs also add `SUBDOMAIN` environment variable to the task. `SUBDOMAIN` is base64 encoded value of `subdomain` parameter.
+mirage-ecs also add `SUBDOMAIN` environment variable to the task.
 
-mirage-ecs tags the task with following keys and values.
+- (v0 and v1) `SUBDOMAIN` contains a base64 encoded value of `subdomain` parameter.
+- (v2) `SUBDOMAIN` contains a raw value of `subdomain` parameter.
+  `-compat-v1` cli flag enables v0,v1 behavior.
+
+mirage-ecs tags the ECS task with following keys and values.
 - `ManagedBy=mirage-ecs`
 - `Subdomain={base64 encoded subdomain}`
 - `branch={branch}`
 - `launched_by={launched_by}`
+
+The tag value of `Subdomain` is the base64 encoded value of the `subdomain` parameter always because some special characters(for example, `*`) are not allowed in tag values.
 
 #### `GET /api/logs`
 
