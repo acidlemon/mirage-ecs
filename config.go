@@ -2,6 +2,7 @@ package mirageecs
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -605,5 +606,13 @@ func copyToFile(src io.Reader, dst string) (int64, error) {
 func (cfg *Config) ValidateOriginMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		return next(c)
+	}
+}
+
+func (cfg *Config) EncodeSubdomain(subdomain string) string {
+	if cfg.compatV1 {
+		return base64.URLEncoding.EncodeToString([]byte(subdomain))
+	} else {
+		return subdomain
 	}
 }
