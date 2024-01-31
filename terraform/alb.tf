@@ -63,11 +63,28 @@ resource "aws_lb_listener" "mirage-ecs-https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate.mirage-ecs.arn
 
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      status_code  = "404"
+      content_type = "text/plain"
+      message_body = "404 Not Found"
+    }
+  }
+  tags = {
+    Name = "${var.project}-https"
+  }
+}
+
+resource "aws_lb_listener_rule" "mirage-ecs-mirage-web" {
+  listener_arn = aws_lb_listener.mirage-ecs-https.arn
+  priority     = 1
+
   // If you want to use OIDC authentication, you need to set the following tf variables.
   // oauth_client_id, oauth_client_secret
   // You must set the OAuth callback URL to https://${var.domain}/oauth2/idresponse
   // See also https://docs.aws.amazon.com/ja_jp/elasticloadbalancing/latest/application/listener-authenticate-users.html
-  dynamic "default_action" {
+  dynamic "action" {
     for_each = var.oauth_client_id != "" ? [1] : []
     content {
       type = "authenticate-oidc"
@@ -82,13 +99,33 @@ resource "aws_lb_listener" "mirage-ecs-https" {
       }
     }
   }
-
-  default_action {
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.mirage-ecs-http.arn
   }
 
-  tags = {
-    Name = "${var.project}-https"
+  condition {
+    host_header {
+      values = [
+        "mirage.${var.domain}",
+      ]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "main-mirage-ecs-launched" {
+  listener_arn = aws_lb_listener.mirage-ecs-https.arn
+  priority     = 2
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mirage-ecs-http.arn
+  }
+
+  condition {
+    host_header {
+      values = [
+        "*.${var.domain}",
+      ]
+    }
   }
 }
