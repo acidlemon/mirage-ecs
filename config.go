@@ -449,7 +449,10 @@ func (cfg *Config) AuthMiddlewareForWeb(next echo.HandlerFunc) echo.HandlerFunc 
 				slog.Error(f("invalid origin header: %s", origin))
 				return echo.ErrBadRequest
 			}
-			host, _, _ := net.SplitHostPort(u.Host)
+			host, _, err := net.SplitHostPort(u.Host)
+			if err != nil {
+				host = u.Host // missing port
+			}
 			if host != cfg.Host.WebApi {
 				slog.Error(f("invalid origin host: %s", u.Host))
 				return echo.ErrBadRequest
