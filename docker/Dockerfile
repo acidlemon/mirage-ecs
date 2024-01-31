@@ -8,7 +8,7 @@ RUN make clean && make && mv mirage-ecs /stash/
 RUN cp -a html /stash/
 RUN cp docker/example-config.yml /stash/
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/mirage/html
