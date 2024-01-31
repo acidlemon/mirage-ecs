@@ -166,6 +166,17 @@ func TestAuthMiddleware(t *testing.T) {
 			BodyContains: "launched",
 		},
 		{
+			Name: "POST /launch succeeds with valid origin header(without port) with basic auth",
+			Request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/launch", nil)
+				req.SetBasicAuth("user", "pass")
+				req.Header.Set("Origin", "https://mirage.localtest.me")
+				return req
+			},
+			ExpectStatus: 200,
+			BodyContains: "launched",
+		},
+		{
 			Name: "POST /launch fails with valid origin header with valid cookie only",
 			Request: func() *http.Request {
 				req := httptest.NewRequest(http.MethodPost, "/launch", nil)
