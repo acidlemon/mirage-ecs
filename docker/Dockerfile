@@ -1,4 +1,4 @@
-FROM golang:1.20 AS builder
+FROM golang:1.21 AS builder
 
 ADD . /stash/src/github.com/acidlemon/mirage-ecs
 WORKDIR /stash/src/github.com/acidlemon/mirage-ecs
