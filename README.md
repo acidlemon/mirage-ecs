@@ -1,8 +1,8 @@
 # mirage-ecs - reverse proxy frontend for Amazon ECS
 
-mirage-ecs is reverse proxy for ECS task and task manager.
+mirage-ecs is a reverse proxy for ECS tasks and a manager for the tasks.
 
-mirage-ecs can run and stop an ECS task and serve http request with specified subdomain. Additionaly, mirage passes variable to containers in task using environment variables.
+mirage-ecs can run and stop ECS tasks and proxy HTTP requests to the tasks with a specified subdomain. Additionally, mirage passes variables to containers in tasks using environment variables.
 
 ## Usage
 
@@ -26,6 +26,8 @@ An example of terraform configuration for deploying mirage-ecs is [terraform/](t
 
 An example of task definition of mirage-ecs is [ecs-task-def.json](ecs-task-def.json).
 
+Pre build container images are available at [ghcr.io/acidlemon/mirage-ecs](https://github.com/acidlemon/mirage-ecs/pkgs/container/mirage-ecs).
+
 Requirements:
 - `awsvpc` network mode.
 - A public IP address or NAT Gateway or VPC endpoints to call AWS APIs.
@@ -45,9 +47,24 @@ Requirements:
   - `s3:GetObject` (optional for loading config/html files from S3)
   - `s3:ListBucket` (optional for loading html files from S3)
 
-  See also [terraform/iam.tf](terraform/iam.tf).
+See also [terraform/iam.tf](terraform/iam.tf).
 
-### Using CLI
+### Using Web Interface
+
+1. Access to mirage web interface via "https://mirage.dev.example.net/".
+1. Press "Launch New Task".
+1. Fill launch options.
+   - subdomain: cool-feature
+   - branch: feature/cool
+   - taskdef: myapp
+1. Now, you can access to container using "https://cool-feature.dev.exmaple.net/".
+1. Press "Terminate" button.
+
+![](docs/mirage-ecs-list.png)
+
+![](docs/mirage-ecs-launcher.png)
+
+### API Usage
 
 Launch an ECS task using curl.
 
@@ -83,22 +100,6 @@ If multiple tasks match the pattern, mirage-ecs prefer the task with the earlies
 
 After `foo-*` is terminated, `foo-bar-baz` matches 2 and 3, but mirage-ecs prefer 2.
 
-### Using Web Interface
-
-1. Access to mirage web interface via "https://mirage.dev.example.net/".
-1. Press "Launch New Task".
-1. Fill launch options.
-   - subdomain: cool-feature
-   - branch: feature/cool
-   - taskdef: myapp
-1. Now, you can access to container using "https://cool-feature.dev.exmaple.net/".
-1. Press "Terminate" button.
-
-
-![](docs/mirage-ecs-list.png)
-
-![](docs/mirage-ecs-launcher.png)
-
 ### Full Configuration
 
 mirage-ecs can be configured by a config file.
@@ -106,8 +107,6 @@ mirage-ecs can be configured by a config file.
 Write a YAML file, and specify the file by the `-conf` CLI option or the `MIRAGE_CONF` environment variable.
 
 mirage-ecs can load config file from S3 and local file. To load config file from S3, specify the S3 URL (e.g. `s3://example-bucket/config.yaml`) to the `MIRAGE_CONF` environment variable.
-
-```console
 
 The default configuration is same as below.
 
@@ -128,15 +127,6 @@ parameters:
     env: GIT_BRANCH
     rule: ""
     required: true
-auth:
-  token:
-    header: x-mirage-token
-    token: "{{ env `MIRAGE_TOKEN` }}"
-  amzn_oidc:
-    claim: email
-    matcher:
-      - suffix: "@example.com"
-      - exact: "foo@example.net"
 ```
 
 #### `host` section
