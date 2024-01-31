@@ -418,6 +418,22 @@ auth:
 
 When ALB passes an OIDC token, mirage-ecs validates the token and checks the claim value. If the claim value matches any matchers, mirage-ecs allows access.
 
+##### OIDC authentication with ALB
+
+When you configure OIDC authentication at ALB, you must prepare two listener rules. One is for mirege webapi access with OIDC authentication, and the other is for the URLs of launched ECS tasks without OIDC authentication.
+
+For example, if you configure OIDC authentication for `https://mirage.dev.example.net/*`, you must configure the following listener rules.
+
+1. `https://mirage.dev.example.net/*` with OIDC authentication.
+2. `https://*.dev.example.net/*` without OIDC authentication.
+
+Both listener rules must forward requests to a target group of mirage-ecs.
+
+To explain the reason for this, a session cookie provided by ALB is used to authenticate the request to mirage-ecs webapi. But the cookie is not sent to launched ECS tasks because the host of the URL is different. So, you must configure the second listener rule to allow access to launched ECS tasks without OIDC authentication.
+
+In this case, `auth.cookie_secret` and `listen.http[].require_auth_cookie` settings are useful to restrict access to launched ECS tasks.
+
+When these settings are enabled, mirage-ecs sends an original cookie to the browser after being authorized by OIDC authentication. The cookie has a domain attribute and is also sent to launched ECS tasks. mirage-ecs validates the cookie to authenticate the request to launched ECS tasks.
 
 ## mirage link
 
