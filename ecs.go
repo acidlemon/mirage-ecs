@@ -68,12 +68,12 @@ func (info Information) ShouldBePurged(duration time.Duration, excludesMap map[s
 
 type TaskParameter map[string]string
 
-func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters) []types.KeyValuePair {
+func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string) []types.KeyValuePair {
 	kvp := make([]types.KeyValuePair, 0, len(p)+2)
 	kvp = append(kvp,
 		types.KeyValuePair{
 			Name:  aws.String(EnvSubdomain),
-			Value: aws.String(encodeTagValue(subdomain)),
+			Value: aws.String(enc(subdomain)),
 		},
 		types.KeyValuePair{
 			Name:  aws.String(EnvSubdomainRaw),
@@ -118,9 +118,9 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 	return tags
 }
 
-func (p TaskParameter) ToEnv(subdomain string, configParams Parameters) map[string]string {
+func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func(string) string) map[string]string {
 	env := make(map[string]string, len(p)+1)
-	env[EnvSubdomain] = encodeTagValue(subdomain)
+	env[EnvSubdomain] = enc(subdomain)
 	env[EnvSubdomainRaw] = subdomain
 	for _, v := range configParams {
 		v := v
@@ -197,7 +197,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 
 	// override envs for each container in taskdef
 	ov := &types.TaskOverride{}
-	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter)
+	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter, cfg.EncodeSubdomain)
 
 	for _, c := range tdOut.TaskDefinition.ContainerDefinitions {
 		name := *c.Name

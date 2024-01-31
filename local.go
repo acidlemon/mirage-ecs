@@ -60,7 +60,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 		}
 	}
 	id := generateRandomHexID(32)
-	env := option.ToEnv(subdomain, e.cfg.Parameter)
+	env := option.ToEnv(subdomain, e.cfg.Parameter, e.cfg.EncodeSubdomain)
 	slog.Info(f("Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdefs[0], id))
 	contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
 	port, stopServerFunc := runMockServer(contents)
