@@ -68,3 +68,27 @@ resource "aws_iam_role_policy_attachment" "mirage-ecs" {
 data "aws_iam_role" "ecs-task-execiton" {
   name = "ecsTaskExecutionRole"
 }
+
+resource "aws_iam_policy" "mirage-ecs-exec" {
+  name = "${var.project}-ecs-exec"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "mirage-ecs-exec" {
+  role       = aws_iam_role.task.name
+  policy_arn = aws_iam_policy.mirage-ecs-exec.arn
+}

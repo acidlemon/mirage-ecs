@@ -4,7 +4,7 @@
   containerDefinitions: [
     {
       name: 'mirage-ecs',
-      image: 'ghcr.io/acidlemon/mirage-ecs:{{ env `VERSION` `v1.0.0` }}',
+      image: 'ghcr.io/acidlemon/mirage-ecs:{{ env `VERSION` `v2.0.0` }}',
       portMappings: [
         {
           containerPort: 80,
