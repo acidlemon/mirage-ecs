@@ -6,7 +6,7 @@ jobs:
       matrix:
         go:
           - "1.21"
-          - "go: 1.22.0-rc.1"
+          - "1.22.0-rc.1"
     name: Build
     runs-on: ubuntu-latest
     steps:
