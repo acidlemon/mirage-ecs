@@ -17,6 +17,12 @@ packages:
 docker-image:
 	docker build -t ghcr.io/acidlemon/mirage-ecs:$(GIT_VER) -f docker/Dockerfile .
 
+docker-xuan-image:
+	docker build -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(GIT_VER) -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest -f docker/Dockerfile .
+
+push-xuan-image: docker-xuan-image
+	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs --all-tags
+
 push-image: docker-image
 	docker push ghcr.io/acidlemon/mirage-ecs:$(GIT_VER)
 

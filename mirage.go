@@ -92,11 +92,16 @@ func (m *Mirage) Run(ctx context.Context) error {
 func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, port int) {
 	host := strings.ToLower(strings.Split(req.Host, ":")[0])
 
+	infoMsg := fmt.Sprintf("host: %s", host)
+	slog.Info(infoMsg)
+
 	switch {
 	case m.isWebApiHost(host):
+		slog.Info("webapi host")
 		m.WebApi.ServeHTTP(w, req)
 
 	case m.isTaskHost(host):
+		slog.Info("task host")
 		m.ReverseProxy.ServeHTTPWithPort(w, req, port)
 
 	case strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix):
