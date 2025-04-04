@@ -17,8 +17,8 @@ run: mirage-ecs
 packages:
 	goreleaser release --rm-dist --snapshot --skip-publish
 
-docker-image:
-	docker build -t ghcr.io/acidlemon/mirage-ecs:$(IMAGE_TAG) -f docker/Dockerfile .
+# docker-image:
+# 	docker build -t ghcr.io/acidlemon/mirage-ecs:$(IMAGE_TAG) -f docker/Dockerfile .
 
 docker-xuan-image:
 	docker build -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(IMAGE_TAG) -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest -f docker/Dockerfile .
@@ -26,8 +26,8 @@ docker-xuan-image:
 push-xuan-image: docker-xuan-image
 	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs --all-tags
 
-push-image: docker-image
-	docker push ghcr.io/acidlemon/mirage-ecs:$(GIT_VER)
+# push-image: docker-image
+# 	docker push ghcr.io/acidlemon/mirage-ecs:$(GIT_VER)
 
 test:
 	go test -v ./...
