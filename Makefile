@@ -1,4 +1,7 @@
 GIT_VER := $(shell git describe --tags)
+COMMIT_HASH := $(shell git rev-parse HEAD)
+IMAGE_TAG := sha-$(COMMIT_HASH)
+
 DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 export GO111MODULE := on
 
@@ -15,10 +18,10 @@ packages:
 	goreleaser release --rm-dist --snapshot --skip-publish
 
 docker-image:
-	docker build -t ghcr.io/acidlemon/mirage-ecs:$(GIT_VER) -f docker/Dockerfile .
+	docker build -t ghcr.io/acidlemon/mirage-ecs:$(IMAGE_TAG) -f docker/Dockerfile .
 
 docker-xuan-image:
-	docker build -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(GIT_VER) -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest -f docker/Dockerfile .
+	docker build -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(IMAGE_TAG) -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest -f docker/Dockerfile .
 
 push-xuan-image: docker-xuan-image
 	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs --all-tags
