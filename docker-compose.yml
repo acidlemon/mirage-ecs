@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  mirage-ecs:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "80:80"  # WebUIとリバースプロキシ用ポート
+    # volumes:
+    #   - ./config.yml:/opt/mirage/config.yml
+    environment:
+      # - MIRAGE_CONF=/opt/mirage/config.yml
+      - MIRAGE_LOG_LEVEL=info
+    command: ["-local"]  # ローカルモードで実行
+    restart: unless-stopped
+
+  # 必要に応じてテスト用のモックサービスを追加できます
+  # mock-service:
+  #   image: nginx:alpine
+  #   environment:
+  #     - NGINX_HOST=example.local
+  #   ports:
+  #     - "8080:80"

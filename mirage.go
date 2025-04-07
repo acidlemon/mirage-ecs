@@ -92,7 +92,7 @@ func (m *Mirage) Run(ctx context.Context) error {
 func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, port int) {
 	host := strings.ToLower(strings.Split(req.Host, ":")[0])
 
-	infoMsg := fmt.Sprintf("host: %s", host)
+	infoMsg := fmt.Sprintf("host: %s, reverse_proxy_suffix: %s", host, m.Config.Host.ReverseProxySuffix)
 	slog.Info(infoMsg)
 
 	switch {
@@ -117,6 +117,8 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 }
 
 func (m *Mirage) isTaskHost(host string) bool {
+	msg := fmt.Sprintf("check if host(%s) is task host against suffix(%s)", host, m.Config.Host.ReverseProxySuffix)
+	slog.Info(msg)
 	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
 		subdomain := strings.ToLower(strings.Split(host, ".")[0])
 		return m.ReverseProxy.Exists(subdomain)
