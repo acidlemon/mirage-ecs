@@ -1,7 +1,7 @@
 FROM golang:1.21 AS builder
 
-ADD . /stash/src/github.com/acidlemon/mirage-ecs
-WORKDIR /stash/src/github.com/acidlemon/mirage-ecs
+ADD . /stash/src/mirage-ecs
+WORKDIR /stash/src/mirage-ecs
 ENV GOPATH=/stash
 
 RUN make clean && make && mv mirage-ecs /stash/

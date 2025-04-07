@@ -12,7 +12,7 @@ clean:
 	rm -rf dist/* mirage-ecs
 
 run: mirage-ecs
-	./mirage-ecs
+	./mirage-ecs -local
 
 packages:
 	goreleaser release --rm-dist --snapshot --skip-publish
