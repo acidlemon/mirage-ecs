@@ -121,7 +121,10 @@ func (m *Mirage) isTaskHost(host string) bool {
 	slog.Info(msg)
 	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
 		subdomain := strings.ToLower(strings.Split(host, ".")[0])
-		return m.ReverseProxy.Exists(subdomain)
+		result := m.ReverseProxy.Exists(subdomain)
+		msg := fmt.Sprintf("subdomain: %s, result: %t", subdomain, result)
+		slog.Info(msg)
+		return result
 	}
 
 	return false
