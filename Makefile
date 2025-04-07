@@ -24,7 +24,8 @@ docker-xuan-image:
 	docker build -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(IMAGE_TAG) -t ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest -f docker/Dockerfile .
 
 push-xuan-image: docker-xuan-image
-	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs --all-tags
+	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs:$(IMAGE_TAG)
+	docker push ghcr.io/bm-sms/xuan/xuan-mirage-ecs:latest
 
 # push-image: docker-image
 # 	docker push ghcr.io/acidlemon/mirage-ecs:$(GIT_VER)
