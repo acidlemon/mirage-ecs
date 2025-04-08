@@ -117,7 +117,8 @@ func (m *Mirage) ServeHTTPWithPort(w http.ResponseWriter, req *http.Request, por
 }
 
 func (m *Mirage) isTaskHost(host string) bool {
-	msg := fmt.Sprintf("check if host(%s) is task host against suffix(%s)", host, m.Config.Host.ReverseProxySuffix)
+	hasSuffix := strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix)
+	msg := fmt.Sprintf("check if host(%s) is task host against suffix(%s), %v", host, m.Config.Host.ReverseProxySuffix, hasSuffix)
 	slog.Info(msg)
 	if strings.HasSuffix(host, m.Config.Host.ReverseProxySuffix) {
 		subdomain := strings.ToLower(strings.Split(host, ".")[0])
