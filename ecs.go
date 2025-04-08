@@ -453,6 +453,9 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, e
 			return infos, fmt.Errorf("failed to describe tasks: %w", err)
 		}
 
+		msg := fmt.Sprintf("tasksOut.Tasks: %v", tasksOut.Tasks)
+		slog.Debug(msg)
+
 		for _, task := range tasksOut.Tasks {
 			task := task
 			if getTagsFromTask(&task, TagManagedBy) != TagValueMirage {
@@ -479,6 +482,8 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, e
 			if task.StartedAt != nil {
 				info.Created = (*task.StartedAt).In(time.Local)
 			}
+			msg := fmt.Sprintf("info: %v will be appended", info)
+			slog.Info(msg)
 			infos = append(infos, info)
 		}
 
