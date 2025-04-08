@@ -224,6 +224,7 @@ SYNC:
 		for _, info := range running {
 			slog.Debug(f("running task %s", info.ID))
 			slog.Debug(f("subdomain: %s, ip: %s", info.SubDomain, info.IPAddress))
+			slog.Debug(f("portMap: %+v", info.PortMap))
 			if info.IPAddress != "" {
 				available[info.SubDomain] = true
 				for name, port := range info.PortMap {
