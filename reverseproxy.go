@@ -187,6 +187,8 @@ func (ph proxyHandlers) add(port int, ipaddress string, h http.Handler) {
 }
 
 func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPort int) {
+	msg := fmt.Sprintf("AddSubdomain called: subdomain = %s, ipaddress = %s, targetPort = %d", subdomain, ipaddress, targetPort)
+	slog.Debug(msg)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	addr := net.JoinHostPort(ipaddress, strconv.Itoa(targetPort))
