@@ -1,0 +1,9 @@
+{
+  "subdomain": "nginx",
+  "taskdef": ["sample-nginx-task:3"],
+  "branch": "main",
+  "parameters": {
+    "sample_env": "sample_value",
+    "sample_env2": "sample_value2"
+  }
+}
