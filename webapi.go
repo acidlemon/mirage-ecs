@@ -206,6 +206,8 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	} else {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
 		defer cancel()
+		debugMsg := fmt.Sprintf("params: %v", parameter)
+		slog.Info(debugMsg)
 		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
 		if err != nil {
 			slog.Error(f("launch failed: %s", err))
