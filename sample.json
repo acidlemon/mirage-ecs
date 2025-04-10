@@ -1,9 +1,5 @@
 {
-  "subdomain": "nginx",
-  "taskdef": ["sample-nginx-task:3"],
-  "branch": "main",
-  "parameters": {
-    "sample_env": "sample_value",
-    "sample_env2": "sample_value2"
-  }
+  "subdomain": "sample5",
+  "taskdef": ["sample-nginx-task:3","arn:aws:ecs:ap-northeast-1:356585129680:task-definition/HcsServiceTaskDefinition:859"],
+  "branch": "main"
 }
