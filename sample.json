@@ -1,5 +1,5 @@
 {
-  "subdomain": "sample5",
+  "subdomain": "preview1",
   "taskdef": ["sample-nginx-task:3","arn:aws:ecs:ap-northeast-1:356585129680:task-definition/HcsServiceTaskDefinition:859"],
   "branch": "main"
 }
