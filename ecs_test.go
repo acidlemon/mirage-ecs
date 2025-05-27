@@ -2,6 +2,7 @@ package mirageecs_test
 
 import (
 	"context"
+	"regexp"
 	"testing"
 	"time"
 
@@ -208,6 +209,72 @@ func TestShouldBePurged(t *testing.T) {
 			t.Logf("PurgeParams: %#v", p)
 			if info.ShouldBePurged(p) != s.expected {
 				t.Errorf("Mismatch in ShouldBePurged: %v", s)
+			}
+		})
+	}
+}
+
+func TestRecoverTaskParameter(t *testing.T) {
+	tests := []struct {
+		name          string
+		recoverConfig *mirageecs.Recover
+		info          *mirageecs.Information
+		expectedOk    bool
+		expectedParam mirageecs.TaskParameter
+	}{
+		{
+			name:          "skip",
+			recoverConfig: nil,
+			info:          &mirageecs.Information{},
+			expectedOk:    false,
+			expectedParam: nil,
+		},
+		{
+			name: "ok",
+			recoverConfig: &mirageecs.Recover{
+				ExcludeParameter: map[string]struct{}{
+					"aaa": struct{}{},
+					"bbb": struct{}{},
+				},
+				FixedParameter: map[string]string{
+					"ccc": "xxx",
+					"ddd": "yyy",
+				},
+				Parameter: []*mirageecs.Parameter{
+					{Name: "aaa"},
+					{Name: "bbb"},
+					{Name: "ccc"},
+					{Name: "ddd"},
+					{Name: "eee"},
+				},
+			},
+			info: &mirageecs.Information{
+				Tags: []types.Tag{
+					{Key: aws.String("Subdomain"), Value: aws.String("test")},
+					{Key: aws.String("aaa"), Value: aws.String("fff")},
+					{Key: aws.String("bbb"), Value: aws.String("ggg")},
+					{Key: aws.String("ccc"), Value: aws.String("hhh")},
+					{Key: aws.String("ddd"), Value: aws.String("iii")},
+					{Key: aws.String("eee"), Value: aws.String("jjj")},
+				},
+			},
+			expectedOk: true,
+			expectedParam: mirageecs.TaskParameter{
+				"ccc": "xxx",
+				"ddd": "yyy",
+				"eee": "jjj",
+			},
+		},
+	}
+	opt := cmpopts.IgnoreUnexported(regexp.Regexp{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotParam, gotOk := tt.info.RecoverTaskParameter(tt.recoverConfig)
+			if g, w := gotOk, tt.expectedOk; g != w {
+				t.Errorf("unexpected. want:%t, but got %t", w, g)
+			}
+			if diff := cmp.Diff(gotParam, tt.expectedParam, opt); diff != "" {
+				t.Errorf("Mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}

@@ -26,6 +26,31 @@ import (
 
 var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskdef is immutable.
 
+type Informations []*Information
+
+func (is Informations) SortByCreated(asc bool) Informations {
+	ret := make(Informations, len(is))
+	copy(ret, is)
+	sort.SliceStable(ret, func(i, j int) bool {
+		if asc {
+			return ret[i].Created.Before(ret[j].Created)
+		} else {
+			return ret[j].Created.Before(ret[i].Created)
+		}
+	})
+	return ret
+}
+
+func (is Informations) ToMapBySubdomain() map[string]*Information {
+	ret := make(map[string]*Information, len(is))
+	for _, v := range is.SortByCreated(false) {
+		if _, ok := ret[v.SubDomain]; !ok {
+			ret[v.SubDomain] = v
+		}
+	}
+	return ret
+}
+
 type Information struct {
 	ID         string            `json:"id"`
 	ShortID    string            `json:"short_id"`
@@ -69,6 +94,31 @@ func (info Information) ShouldBePurged(p *PurgeParams) bool {
 		return false
 	}
 	return true
+}
+
+func (info Information) RecoverTaskParameter(r *Recover) (TaskParameter, bool) {
+	if r == nil {
+		return nil, false
+	}
+	tagMap := make(map[string]string, len(info.Tags))
+	for _, v := range info.Tags {
+		tagMap[*v.Key] = *v.Value
+	}
+	ps := r.Parameter
+	ret := make(TaskParameter, len(ps)+len(r.FixedParameter))
+	for _, p := range ps {
+		k := p.Name
+		if _, ok := r.ExcludeParameter[k]; ok {
+			continue
+		}
+		if v, ok := tagMap[k]; ok {
+			ret[p.Name] = v
+		}
+	}
+	for k, v := range r.FixedParameter {
+		ret[k] = v
+	}
+	return ret, true
 }
 
 type TaskParameter map[string]string

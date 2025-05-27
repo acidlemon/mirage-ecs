@@ -45,6 +45,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 	Auth      *Auth      `yaml:"auth"`
 	Purge     *Purge     `yaml:"purge"`
+	Recover   *Recover   `yaml:"recover"`
 
 	compatV1  bool
 	localMode bool
@@ -235,8 +236,9 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		ECS: ECSCfg{
 			Region: os.Getenv("AWS_REGION"),
 		},
-		Auth:  nil,
-		Purge: nil,
+		Auth:    nil,
+		Purge:   nil,
+		Recover: nil,
 
 		localMode: p.LocalMode,
 		compatV1:  p.CompatV1,
@@ -326,6 +328,13 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 			return nil, fmt.Errorf("invalid purge config: %w", err)
 		}
 	}
+
+	if cfg.Recover != nil {
+		if err := cfg.Recover.Validate(cfg.Parameter); err != nil {
+			return nil, fmt.Errorf("invalid recover config: %w", err)
+		}
+	}
+
 	return cfg, nil
 }
 

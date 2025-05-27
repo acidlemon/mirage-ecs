@@ -233,13 +233,30 @@ SYNC:
 			}
 		}
 
+		stoppedBySubdomain := Informations(stopped).ToMapBySubdomain()
+		recoverInfos := make([]*Information, 0, len(stoppedBySubdomain))
 		for _, subdomain := range rp.Subdomains() {
 			if !available[subdomain] {
 				rp.RemoveSubdomain(subdomain)
+				if info, ok := stoppedBySubdomain[subdomain]; ok {
+					recoverInfos = append(recoverInfos, info)
+				}
 			}
 		}
+
 		if err := r53.Apply(ctx); err != nil {
 			slog.Warn(err.Error())
+		}
+
+		for _, info := range recoverInfos {
+			param, ok := info.RecoverTaskParameter(app.Config.Recover)
+			if !ok {
+				continue
+			}
+			slog.Info(f("recovering task %s", info.ID))
+			if err := app.runner.Launch(ctx, info.SubDomain, param, info.TaskDef); err != nil {
+				slog.Warn(err.Error())
+			}
 		}
 	}
 }
