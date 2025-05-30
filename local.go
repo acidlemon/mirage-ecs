@@ -15,6 +15,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 )
 
@@ -61,6 +62,11 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 			return err
 		}
 	}
+	_commonID, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+	commonID := _commonID.String()
 	for _, taskdef := range taskdefs {
 		id := generateRandomHexID(32)
 		env := option.ToEnv(subdomain, e.cfg.Parameter, e.cfg.EncodeSubdomain)
@@ -70,6 +76,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 		e.Informations = append(e.Informations, &Information{
 			ID:         "arn:aws:ecs:ap-northeast-1:123456789012:task/mirage/" + id,
 			ShortID:    id,
+			CommonID:   commonID,
 			SubDomain:  subdomain,
 			GitBranch:  option["branch"],
 			TaskDef:    taskdef,
@@ -80,7 +87,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 				"httpd": port,
 			},
 			Env:  env,
-			Tags: option.ToECSTags(subdomain, e.cfg.Parameter),
+			Tags: option.ToECSTags(subdomain, e.cfg.Parameter, commonID),
 			task: &types.Task{
 				LastStatus:    aws.String(statusRunning),
 				DesiredStatus: aws.String(statusRunning),

@@ -12,6 +12,7 @@ import (
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/fujiwara/tracer"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -29,6 +30,7 @@ var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskd
 type Information struct {
 	ID         string            `json:"id"`
 	ShortID    string            `json:"short_id"`
+	CommonID   string            `json:"common_id"`
 	SubDomain  string            `json:"subdomain"`
 	GitBranch  string            `json:"branch"`
 	TaskDef    string            `json:"taskdef"`
@@ -106,7 +108,7 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 	return kvp
 }
 
-func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []types.Tag {
+func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, commonID string) []types.Tag {
 	tags := make([]types.Tag, 0, len(p)+3)
 	tags = append(tags,
 		types.Tag{
@@ -116,6 +118,10 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 		types.Tag{
 			Key:   aws.String(TagManagedBy),
 			Value: aws.String(TagValueMirage),
+		},
+		types.Tag{
+			Key:   aws.String(TagCommonID),
+			Value: aws.String(commonID),
 		},
 	)
 	for _, v := range configParams {
@@ -149,6 +155,7 @@ const (
 	TagManagedBy   = "ManagedBy"
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
+	TagCommonID    = "CommonID"
 
 	EnvSubdomain    = "SUBDOMAIN"
 	EnvSubdomainRaw = "SUBDOMAINRAW"
@@ -191,7 +198,7 @@ func (e *ECS) SetProxyControlChannel(ch chan *proxyControl) {
 	e.proxyControlCh = ch
 }
 
-func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter) error {
+func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter, commonID string) error {
 	cfg := e.cfg
 
 	slog.Info(f("launching task subdomain:%s taskdef:%s", subdomain, taskdef))
@@ -218,7 +225,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	}
 	slog.Debug(f("Task Override: %v", ov))
 
-	tags := option.ToECSTags(subdomain, cfg.Parameter)
+	tags := option.ToECSTags(subdomain, cfg.Parameter, commonID)
 	runtaskInput := &ecs.RunTaskInput{
 		CapacityProviderStrategy: cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(cfg.ECS.Cluster),
@@ -270,11 +277,17 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 
 	slog.Info(f("launching subdomain:%s taskdefs:%v", subdomain, taskdefs))
 
+	_commonID, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+	commonID := _commonID.String()
+
 	var eg errgroup.Group
 	for _, taskdef := range taskdefs {
 		taskdef := taskdef
 		eg.Go(func() error {
-			return e.launchTask(ctx, subdomain, taskdef, option)
+			return e.launchTask(ctx, subdomain, taskdef, option, commonID)
 		})
 	}
 	return eg.Wait()
@@ -470,6 +483,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, e
 			info := &Information{
 				ID:         *task.TaskArn,
 				ShortID:    shortenArn(*task.TaskArn),
+				CommonID:   getTagsFromTask(&task, TagCommonID),
 				SubDomain:  decodeTagValue(getTagsFromTask(&task, "Subdomain")),
 				GitBranch:  getEnvironmentFromTask(&task, "GIT_BRANCH"),
 				TaskDef:    shortenArn(*task.TaskDefinitionArn),

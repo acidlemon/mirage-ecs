@@ -19,6 +19,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 		taskParam    mirageecs.TaskParameter
 		configParams mirageecs.Parameters
 		subdomain    string
+		commonID     string
 		expectedKVP  []types.KeyValuePair
 		expectedTags []types.Tag
 		expectedEnv  map[string]string
@@ -36,6 +37,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 				&mirageecs.Parameter{Name: "Param3", Env: "ENV3"},
 			},
 			subdomain: "testsubdomain",
+			commonID:  "xxx",
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
 				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
@@ -45,6 +47,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			expectedTags: []types.Tag{
 				{Key: aws.String("Subdomain"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
 				{Key: aws.String("ManagedBy"), Value: aws.String(mirageecs.TagValueMirage)},
+				{Key: aws.String("CommonID"), Value: aws.String("xxx")},
 				{Key: aws.String("Param1"), Value: aws.String("Value1")},
 				{Key: aws.String("Param2"), Value: aws.String("Value2")},
 			},
@@ -68,6 +71,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 				&mirageecs.Parameter{Name: "Param3", Env: "ENV3"},
 			},
 			subdomain: "testsubdomain",
+			commonID:  "xxx",
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("testsubdomain")},
 				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
@@ -77,6 +81,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			expectedTags: []types.Tag{
 				{Key: aws.String("Subdomain"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
 				{Key: aws.String("ManagedBy"), Value: aws.String(mirageecs.TagValueMirage)},
+				{Key: aws.String("CommonID"), Value: aws.String("xxx")},
 				{Key: aws.String("Param1"), Value: aws.String("Value1")},
 				{Key: aws.String("Param2"), Value: aws.String("Value2")},
 			},
@@ -101,7 +106,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			if diff := cmp.Diff(kvpResult, tt.expectedKVP, opt); diff != "" {
 				t.Errorf("Mismatch in KeyValuePairs (-got +want):\n%s", diff)
 			}
-			tagsResult := tt.taskParam.ToECSTags(tt.subdomain, tt.configParams)
+			tagsResult := tt.taskParam.ToECSTags(tt.subdomain, tt.configParams, tt.commonID)
 			if diff := cmp.Diff(tagsResult, tt.expectedTags, opt); diff != "" {
 				t.Errorf("Mismatch in Tags (-got +want):\n%s", diff)
 			}
