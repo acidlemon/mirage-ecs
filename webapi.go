@@ -206,7 +206,7 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	} else {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
 		defer cancel()
-		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
+		err := api.runner.Launch(ctx, subdomain, parameter, LaunchTypeLaunch, taskdefs...)
 		if err != nil {
 			slog.Error(f("launch failed: %s", err))
 			return http.StatusInternalServerError, err

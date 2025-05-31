@@ -54,7 +54,7 @@ func (e *LocalTaskRunner) Trace(_ context.Context, id string) (string, error) {
 	return fmt.Sprintf("mock trace of %s", id), nil
 }
 
-func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
+func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option TaskParameter, launchType LaunchType, taskdefs ...string) error {
 	if infos := e.find(subdomain); 0 < len(infos) {
 		slog.Info(f("subdomain %s is already running task id %v. Terminating...", subdomain, infos.ShortIDs()))
 		err := e.TerminateBySubdomain(ctx, subdomain)
@@ -69,7 +69,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 	commonID := _commonID.String()
 	for _, taskdef := range taskdefs {
 		id := generateRandomHexID(32)
-		env := option.ToEnv(subdomain, e.cfg.Parameter, e.cfg.EncodeSubdomain)
+		env := option.ToEnv(subdomain, e.cfg.Parameter, e.cfg.EncodeSubdomain, launchType)
 		slog.Info(f("Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdef, id))
 		contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
 		port, stopServerFunc := runMockServer(contents)
@@ -87,7 +87,7 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 				"httpd": port,
 			},
 			Env:  env,
-			Tags: option.ToECSTags(subdomain, e.cfg.Parameter, commonID),
+			Tags: option.ToECSTags(subdomain, e.cfg.Parameter, commonID, launchType),
 			task: &types.Task{
 				LastStatus:    aws.String(statusRunning),
 				DesiredStatus: aws.String(statusRunning),
