@@ -12,6 +12,7 @@ import (
 
 	ttlcache "github.com/ReneKroon/ttlcache/v2"
 	"github.com/fujiwara/tracer"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -26,34 +27,10 @@ import (
 
 var taskDefinitionCache = ttlcache.NewCache() // no need to expire because taskdef is immutable.
 
-type Informations []*Information
-
-func (is Informations) SortByCreated(asc bool) Informations {
-	ret := make(Informations, len(is))
-	copy(ret, is)
-	sort.SliceStable(ret, func(i, j int) bool {
-		if asc {
-			return ret[i].Created.Before(ret[j].Created)
-		} else {
-			return ret[j].Created.Before(ret[i].Created)
-		}
-	})
-	return ret
-}
-
-func (is Informations) ToMapBySubdomain() map[string]*Information {
-	ret := make(map[string]*Information, len(is))
-	for _, v := range is.SortByCreated(false) {
-		if _, ok := ret[v.SubDomain]; !ok {
-			ret[v.SubDomain] = v
-		}
-	}
-	return ret
-}
-
 type Information struct {
 	ID         string            `json:"id"`
 	ShortID    string            `json:"short_id"`
+	CommonID   string            `json:"common_id"`
 	SubDomain  string            `json:"subdomain"`
 	GitBranch  string            `json:"branch"`
 	TaskDef    string            `json:"taskdef"`
@@ -96,34 +73,108 @@ func (info Information) ShouldBePurged(p *PurgeParams) bool {
 	return true
 }
 
-func (info Information) RecoverTaskParameter(r *Recover) (TaskParameter, bool) {
-	if r == nil {
-		return nil, false
-	}
-	tagMap := make(map[string]string, len(info.Tags))
+func (info Information) TaskParameter(ps Parameters) TaskParameter {
+	tags := make(map[string]string, len(ps))
 	for _, v := range info.Tags {
-		tagMap[*v.Key] = *v.Value
+		tags[*v.Key] = *v.Value
 	}
-	ps := r.Parameter
-	ret := make(TaskParameter, len(ps)+len(r.FixedParameter))
+	ret := make(TaskParameter)
 	for _, p := range ps {
 		k := p.Name
-		if _, ok := r.ExcludeParameter[k]; ok {
-			continue
-		}
-		if v, ok := tagMap[k]; ok {
-			ret[p.Name] = v
+		if v, ok := tags[k]; ok {
+			ret[k] = v
 		}
 	}
-	for k, v := range r.FixedParameter {
-		ret[k] = v
+	return ret
+}
+
+type Informations []*Information
+
+func (infos Informations) ShortIDs() []string {
+	return lo.Map(infos, func(info *Information, _ int) string {
+		return info.ShortID
+	})
+}
+
+func (infos Informations) Taskdefs() []string {
+	return lo.Map(infos, func(v *Information, _ int) string {
+		return v.TaskDef
+	})
+}
+
+func (infos Informations) SortByTaskCreatedDesc() Informations {
+	ret := append(Informations(nil), infos...)
+	sort.SliceStable(ret, func(i, j int) bool {
+		return (*ret[i].task.CreatedAt).After(*ret[j].task.CreatedAt)
+	})
+	return ret
+}
+
+type CommonIDWithInformations struct {
+	Subdomain          string
+	AvailableSubdomain bool
+	CommonID           string
+	Informations       Informations
+}
+
+func (c *CommonIDWithInformations) ShouldBeRelaunch(hookStoppedReasons []string) bool {
+	if !c.AvailableSubdomain {
+		return false
 	}
-	return ret, true
+
+	stopped := lo.Filter(c.Informations, func(info *Information, _ int) bool {
+		return *info.task.DesiredStatus == statusStopped
+	})
+	if len(stopped) == 0 {
+		return false
+	}
+
+	relaunchable := lo.Filter(stopped, func(info *Information, _ int) bool {
+		return info.task.StartedAt != nil &&
+			info.task.StoppedReason != nil &&
+			lo.ContainsBy(hookStoppedReasons, func(v string) bool {
+				return strings.Contains(*info.task.StoppedReason, v)
+			})
+	})
+
+	return len(stopped) == len(relaunchable)
+}
+
+func (c *CommonIDWithInformations) TaskParameter(ps Parameters) TaskParameter {
+	return c.Informations[0].TaskParameter(ps)
+}
+
+func (c *CommonIDWithInformations) Taskdefs() []string {
+	return c.Informations.Taskdefs()
+}
+
+func (infos Informations) LatestInformationsBySubdomain(subdomains []string) map[string]*CommonIDWithInformations {
+	availableSubdomain := make(map[string]bool, len(subdomains))
+	for _, v := range subdomains {
+		availableSubdomain[v] = true
+	}
+
+	ret := make(map[string]*CommonIDWithInformations, len(infos))
+	for _, info := range infos.SortByTaskCreatedDesc() {
+		v, ok := ret[info.SubDomain]
+		if !ok {
+			ret[info.SubDomain] = &CommonIDWithInformations{
+				CommonID:           info.CommonID,
+				Informations:       Informations{info},
+				AvailableSubdomain: availableSubdomain[info.SubDomain],
+			}
+		} else {
+			if v.CommonID == info.CommonID {
+				v.Informations = append(v.Informations, info)
+			}
+		}
+	}
+	return ret
 }
 
 type TaskParameter map[string]string
 
-func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string) []types.KeyValuePair {
+func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string, launchType LaunchType) []types.KeyValuePair {
 	kvp := make([]types.KeyValuePair, 0, len(p)+2)
 	kvp = append(kvp,
 		types.KeyValuePair{
@@ -135,6 +186,7 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 			Value: aws.String(subdomain),
 		},
 	)
+	kvp = launchType.AppendECSKeyValuePairs(kvp)
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -148,7 +200,7 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 	return kvp
 }
 
-func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []types.Tag {
+func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, commonID string, launchType LaunchType) []types.Tag {
 	tags := make([]types.Tag, 0, len(p)+3)
 	tags = append(tags,
 		types.Tag{
@@ -159,7 +211,12 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 			Key:   aws.String(TagManagedBy),
 			Value: aws.String(TagValueMirage),
 		},
+		types.Tag{
+			Key:   aws.String(TagCommonID),
+			Value: aws.String(commonID),
+		},
 	)
+	tags = launchType.AppendECSTags(tags)
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -173,16 +230,11 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 	return tags
 }
 
-func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func(string) string) map[string]string {
-	env := make(map[string]string, len(p)+1)
-	env[EnvSubdomain] = enc(subdomain)
-	env[EnvSubdomainRaw] = subdomain
-	for _, v := range configParams {
-		v := v
-		if p[v.Name] == "" {
-			continue
-		}
-		env[strings.ToUpper(v.Env)] = p[v.Name]
+func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func(string) string, launchType LaunchType) map[string]string {
+	kvp := p.ToECSKeyValuePairs(subdomain, configParams, enc, launchType)
+	env := make(map[string]string, len(kvp))
+	for _, v := range kvp {
+		env[*v.Name] = *v.Value
 	}
 	return env
 }
@@ -191,16 +243,48 @@ const (
 	TagManagedBy   = "ManagedBy"
 	TagSubdomain   = "Subdomain"
 	TagValueMirage = "Mirage"
+	TagCommonID    = "CommonID"
+	TagRelaunch    = "Relaunch"
 
 	EnvSubdomain    = "SUBDOMAIN"
 	EnvSubdomainRaw = "SUBDOMAINRAW"
+	EnvRelaunch     = "RELAUNCH"
 
 	statusRunning = string(types.DesiredStatusRunning)
 	statusStopped = string(types.DesiredStatusStopped)
 )
 
+type LaunchType int
+
+const (
+	LaunchTypeLaunch LaunchType = iota + 1
+	LaunchTypeRelaunch
+)
+
+func (l LaunchType) AppendECSKeyValuePairs(kvp []types.KeyValuePair) []types.KeyValuePair {
+	ret := append([]types.KeyValuePair(nil), kvp...)
+	if l == LaunchTypeRelaunch {
+		ret = append(ret, types.KeyValuePair{
+			Name:  aws.String(EnvRelaunch),
+			Value: aws.String("1"),
+		})
+	}
+	return ret
+}
+
+func (l LaunchType) AppendECSTags(tags []types.Tag) []types.Tag {
+	ret := append([]types.Tag(nil), tags...)
+	if l == LaunchTypeRelaunch {
+		ret = append(ret, types.Tag{
+			Key:   aws.String(TagRelaunch),
+			Value: aws.String("1"),
+		})
+	}
+	return ret
+}
+
 type TaskRunner interface {
-	Launch(ctx context.Context, subdomain string, param TaskParameter, taskdefs ...string) error
+	Launch(ctx context.Context, subdomain string, param TaskParameter, launchType LaunchType, taskdefs ...string) error
 	Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error)
 	Trace(ctx context.Context, id string) (string, error)
 	Terminate(ctx context.Context, subdomain string) error
@@ -233,7 +317,7 @@ func (e *ECS) SetProxyControlChannel(ch chan *proxyControl) {
 	e.proxyControlCh = ch
 }
 
-func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter) error {
+func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter, commonID string, launchType LaunchType) error {
 	cfg := e.cfg
 
 	slog.Info(f("launching task subdomain:%s taskdef:%s", subdomain, taskdef))
@@ -246,7 +330,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 
 	// override envs for each container in taskdef
 	ov := &types.TaskOverride{}
-	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter, cfg.EncodeSubdomain)
+	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter, cfg.EncodeSubdomain, launchType)
 
 	for _, c := range tdOut.TaskDefinition.ContainerDefinitions {
 		name := *c.Name
@@ -260,7 +344,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	}
 	slog.Debug(f("Task Override: %v", ov))
 
-	tags := option.ToECSTags(subdomain, cfg.Parameter)
+	tags := option.ToECSTags(subdomain, cfg.Parameter, commonID, launchType)
 	runtaskInput := &ecs.RunTaskInput{
 		CapacityProviderStrategy: cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(cfg.ECS.Cluster),
@@ -299,7 +383,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	return nil
 }
 
-func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
+func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, launchType LaunchType, taskdefs ...string) error {
 	if infos, err := e.find(ctx, subdomain); err != nil {
 		return fmt.Errorf("failed to get subdomain %s: %w", subdomain, err)
 	} else if len(infos) > 0 {
@@ -312,11 +396,17 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 
 	slog.Info(f("launching subdomain:%s taskdefs:%v", subdomain, taskdefs))
 
+	_commonID, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+	commonID := _commonID.String()
+
 	var eg errgroup.Group
 	for _, taskdef := range taskdefs {
 		taskdef := taskdef
 		eg.Go(func() error {
-			return e.launchTask(ctx, subdomain, taskdef, option)
+			return e.launchTask(ctx, subdomain, taskdef, option, commonID, launchType)
 		})
 	}
 	return eg.Wait()
@@ -512,6 +602,7 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, e
 			info := &Information{
 				ID:         *task.TaskArn,
 				ShortID:    shortenArn(*task.TaskArn),
+				CommonID:   getTagsFromTask(&task, TagCommonID),
 				SubDomain:  decodeTagValue(getTagsFromTask(&task, "Subdomain")),
 				GitBranch:  getEnvironmentFromTask(&task, "GIT_BRANCH"),
 				TaskDef:    shortenArn(*task.TaskDefinitionArn),

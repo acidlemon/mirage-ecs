@@ -45,7 +45,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 	Auth      *Auth      `yaml:"auth"`
 	Purge     *Purge     `yaml:"purge"`
-	Recover   *Recover   `yaml:"recover"`
+	Recover   Recover    `yaml:"recover"`
 
 	compatV1  bool
 	localMode bool
@@ -203,6 +203,11 @@ type Network struct {
 	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
 }
 
+type Recover struct {
+	Enable             bool     `yaml:"enable"`
+	HookStoppedReasons []string `yaml:"hook_stopped_reasons"`
+}
+
 const DefaultPort = 80
 const DefaultProxyTimeout = 0
 const AuthCookieName = "mirage-ecs-auth"
@@ -236,9 +241,14 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		ECS: ECSCfg{
 			Region: os.Getenv("AWS_REGION"),
 		},
-		Auth:    nil,
-		Purge:   nil,
-		Recover: nil,
+		Auth:  nil,
+		Purge: nil,
+		Recover: Recover{
+			Enable: false,
+			HookStoppedReasons: []string{
+				"ECS is performing maintenance on the underlying infrastructure hosting the task",
+			},
+		},
 
 		localMode: p.LocalMode,
 		compatV1:  p.CompatV1,
@@ -328,13 +338,6 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 			return nil, fmt.Errorf("invalid purge config: %w", err)
 		}
 	}
-
-	if cfg.Recover != nil {
-		if err := cfg.Recover.Validate(cfg.Parameter); err != nil {
-			return nil, fmt.Errorf("invalid recover config: %w", err)
-		}
-	}
-
 	return cfg, nil
 }
 
