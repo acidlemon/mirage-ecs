@@ -71,6 +71,14 @@ func (info Information) ShouldBePurged(p *PurgeParams) bool {
 	return true
 }
 
+type Informations []*Information
+
+func (infos Informations) ShortIDs() []string {
+	return lo.Map(infos, func(info *Information, _ int) string {
+		return info.ShortID
+	})
+}
+
 type TaskParameter map[string]string
 
 func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string) []types.KeyValuePair {
