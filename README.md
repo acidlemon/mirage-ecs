@@ -355,6 +355,17 @@ The `schedule` is a cron expression to run the purge task.
 
 The `request` section is the same as the `/api/purge` API. See [API Documents](#post-apipurge).
 
+#### `recover` section
+
+`recover` section configures recover feature settings.
+
+```yaml
+recover:
+  enable: true
+```
+
+See ["mirage recover"](#mirage-recover) for details.
+
 #### `auth` section
 
 `auth` section configures authentication to restrict access to webapi. The access via reverse proxy is not restricted by auth methods.
@@ -479,6 +490,43 @@ To enable mirage link, define your Route53 hosted zone ID in a config.
 ```yaml
 link:
   hosted_zone_id: your route53 hosted zone ID
+```
+
+## mirage recover
+
+mirage recover feature enables, if a reverse proxy is available and tasks are stopped, mirage-ecs will automatically relaunch the subdomain if all stopped tasks meet the following conditions:
+
+- All stopped tasks that are down were previously in `RUNNING` state
+- All stopped tasks have a "StoppedReason" that matches one of the "hook\_stopped\_reasons"
+
+This feature allows you to automatically relaunch subdomain if the task is stoppd without going through mirage due to FARGATE maintenance, etc.
+
+The following tags and environment variables are added to the task to be relaunched.
+
+- Tag: `Relaunch=1`
+- Env: `RELAUNCH=1`
+
+This is useful for skipping initialization processes of tasks.
+
+To enable mirage recover, Set the `enable` section to `true`.
+
+```yaml
+recover:
+  enable: true
+  hook_stopped_reasons:
+    - hoge
+    - fuga
+```
+
+The `hook\_stopped\_reasons` section is optional.
+
+If omitted, it is equivalent to the following setting:
+
+```yaml
+recover:
+  enable: true
+  hook_stopped_reasons:
+    - "ECS is performing maintenance on the underlying infrastructure hosting the task"
 ```
 
 ## API Documents
