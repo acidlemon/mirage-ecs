@@ -355,28 +355,6 @@ The `schedule` is a cron expression to run the purge task.
 
 The `request` section is the same as the `/api/purge` API. See [API Documents](#post-apipurge).
 
-#### `recover` section
-
-`recover` section configures auto relaunch settings.
-
-If the `recover` section is present, when an ECS task is detected as down it will be relaunched with the same parameters it had when it was launched.
-
-You can exclude or override certain parameters from the relaunch parameters.
-
-```yaml
-recover:
-  exclude_parameters:
-    hoge:
-    fuga:
-  fixed_parameters:
-    foo: bar
-    baz: qux
-```
-
-The `exclude_parameters` specifies parameters to be excluded from the relaunch parameters.
-
-The `fixed_parameters` specifies the key/value of parameters that will override the relaunch parameters.
-
 #### `auth` section
 
 `auth` section configures authentication to restrict access to webapi. The access via reverse proxy is not restricted by auth methods.

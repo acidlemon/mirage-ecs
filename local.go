@@ -95,13 +95,9 @@ func (e *LocalTaskRunner) Logs(_ context.Context, subdomain string, since time.T
 }
 
 func (e *LocalTaskRunner) Terminate(ctx context.Context, id string) error {
-	slog.Info(f("Terminating a mock task: id=%s", id))
 	for _, info := range e.Informations {
 		if info.ID == id {
-			if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
-				stop()
-			}
-			info.LastStatus = statusStopped
+			return e.TerminateBySubdomain(ctx, info.SubDomain)
 		}
 	}
 	return nil
@@ -119,11 +115,18 @@ func (e *LocalTaskRunner) find(subdomain string) (*Information, bool) {
 func (e *LocalTaskRunner) TerminateBySubdomain(ctx context.Context, subdomain string) error {
 	slog.Info(f("Terminating a mock task: subdomain=%s", subdomain))
 	if info, ok := e.find(subdomain); ok {
-		e.Terminate(ctx, info.ID)
+		if stop := e.stopServerFuncs[info.ShortID]; stop != nil {
+			stop()
+		}
 		e.proxyControlCh <- &proxyControl{
 			Action:    proxyRemove,
 			Subdomain: subdomain,
 		}
+		info.LastStatus = statusStopped
+		e.Informations = lo.Filter(e.Informations, func(i *Information, _ int) bool {
+			return i.ShortID != info.ShortID
+		})
+		e.Informations = append(e.Informations, info)
 	}
 	return nil
 }
