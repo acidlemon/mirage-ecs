@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 )
 
@@ -72,8 +73,9 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 		env := option.ToEnv(subdomain, e.cfg.Parameter, e.cfg.EncodeSubdomain, launchType)
 		slog.Info(f("Launching a new mock task: subdomain=%s, taskdef=%s, id=%s", subdomain, taskdef, id))
 		contents := fmt.Sprintf("Hello, Mirage! subdomain: %s\n%#v", subdomain, env)
-		port, stopServerFunc := runMockServer(contents)
-		e.Informations = append(e.Informations, &Information{
+		info := &Information{}
+		port, stopServerFunc := runMockServer(contents, info)
+		*info = Information{
 			ID:         "arn:aws:ecs:ap-northeast-1:123456789012:task/mirage/" + id,
 			ShortID:    id,
 			CommonID:   commonID,
@@ -94,7 +96,8 @@ func (e *LocalTaskRunner) Launch(ctx context.Context, subdomain string, option T
 				CreatedAt:     aws.Time(time.Now().UTC()),
 				StartedAt:     aws.Time(time.Now().UTC()),
 			},
-		})
+		}
+		e.Informations = append(e.Informations, info)
 		e.stopServerFuncs[id] = stopServerFunc
 		e.proxyControlCh <- &proxyControl{
 			Action:    proxyAdd,
@@ -158,14 +161,45 @@ func generateRandomHexID(length int) string {
 }
 
 // run mock http server on ephemeral port at localhost, returns the port number and a function to stop the server
-func runMockServer(content string) (int, func()) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, content)
-	}))
+func runMockServer(content string, info *Information) (int, func()) {
+	var stopServerFunc func()
+	e := echo.New()
+	e.POST("/stop", func(c echo.Context) error {
+		var data = struct {
+			LastStatusInStopAt *string `json:"last_status_in_stop_at"`
+			StoppedReason      *string `json:"stopped_reason"`
+		}{}
+		if err := c.Bind(&data); err != nil {
+			return c.String(http.StatusBadRequest, "bad request")
+		}
+		if v := data.LastStatusInStopAt; v != nil {
+			switch *v {
+			case "PROVISIONING", "PENDING", "ACTIVATING":
+				info.task.StartedAt = nil
+			case "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED":
+				// pass
+			default:
+				return c.String(http.StatusBadRequest, "bad request")
+			}
+		}
+		if v := data.StoppedReason; v != nil {
+			info.task.StoppedReason = v
+		}
+		info.task.LastStatus = aws.String(statusStopped)
+		info.task.DesiredStatus = aws.String(statusStopped)
+		syncTaskToInfomation(info)
+		go func() { stopServerFunc() }()
+		return c.String(http.StatusOK, "OK")
+	})
+	e.GET("/", func(c echo.Context) error {
+		return c.String(http.StatusOK, content)
+	})
+	ts := httptest.NewServer(e.Server.Handler)
 	slog.Info(f("mock server is running at %s", ts.URL))
 	u, _ := url.Parse(ts.URL)
 	port, _ := strconv.Atoi(u.Port())
-	return port, ts.Close
+	stopServerFunc = ts.Close
+	return port, stopServerFunc
 }
 
 func (e *LocalTaskRunner) GetAccessCount(_ context.Context, subdomain string, duration time.Duration) (int64, error) {

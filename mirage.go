@@ -233,13 +233,26 @@ SYNC:
 			}
 		}
 
-		for _, subdomain := range rp.Subdomains() {
+		subdomains := rp.Subdomains()
+		for _, subdomain := range subdomains {
 			if !available[subdomain] {
 				rp.RemoveSubdomain(subdomain)
 			}
 		}
 		if err := r53.Apply(ctx); err != nil {
 			slog.Warn(err.Error())
+		}
+
+		if cfg := app.Config.Recover; cfg.Enable {
+			for subdomain, v := range Informations(append(running, stopped...)).LatestInformationsBySubdomain(subdomains) {
+				if !v.ShouldBeRelaunch(cfg.HookStoppedReasons) {
+					continue
+				}
+				slog.Info(f("Recovering: subdomain=%s common_id=%s short_id=%v", subdomain, v.CommonID, v.Informations.ShortIDs()))
+				if err := app.runner.Launch(ctx, subdomain, v.TaskParameter(app.Config.Parameter), LaunchTypeRelaunch, v.Taskdefs()...); err != nil {
+					slog.Warn(err.Error())
+				}
+			}
 		}
 	}
 }

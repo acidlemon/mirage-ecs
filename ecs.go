@@ -73,12 +73,103 @@ func (info Information) ShouldBePurged(p *PurgeParams) bool {
 	return true
 }
 
+func (info Information) TaskParameter(ps Parameters) TaskParameter {
+	tags := make(map[string]string, len(ps))
+	for _, v := range info.Tags {
+		tags[*v.Key] = *v.Value
+	}
+	ret := make(TaskParameter)
+	for _, p := range ps {
+		k := p.Name
+		if v, ok := tags[k]; ok {
+			ret[k] = v
+		}
+	}
+	return ret
+}
+
 type Informations []*Information
 
 func (infos Informations) ShortIDs() []string {
 	return lo.Map(infos, func(info *Information, _ int) string {
 		return info.ShortID
 	})
+}
+
+func (infos Informations) Taskdefs() []string {
+	return lo.Map(infos, func(v *Information, _ int) string {
+		return v.TaskDef
+	})
+}
+
+func (infos Informations) SortByTaskCreatedDesc() Informations {
+	ret := append(Informations(nil), infos...)
+	sort.SliceStable(ret, func(i, j int) bool {
+		return (*ret[i].task.CreatedAt).After(*ret[j].task.CreatedAt)
+	})
+	return ret
+}
+
+type CommonIDWithInformations struct {
+	Subdomain          string
+	AvailableSubdomain bool
+	CommonID           string
+	Informations       Informations
+}
+
+func (c *CommonIDWithInformations) ShouldBeRelaunch(hookStoppedReasons []string) bool {
+	if !c.AvailableSubdomain {
+		return false
+	}
+
+	stopped := lo.Filter(c.Informations, func(info *Information, _ int) bool {
+		return *info.task.DesiredStatus == statusStopped
+	})
+	if len(stopped) == 0 {
+		return false
+	}
+
+	relaunchable := lo.Filter(stopped, func(info *Information, _ int) bool {
+		return info.task.StartedAt != nil &&
+			info.task.StoppedReason != nil &&
+			lo.ContainsBy(hookStoppedReasons, func(v string) bool {
+				return strings.Contains(*info.task.StoppedReason, v)
+			})
+	})
+
+	return len(stopped) == len(relaunchable)
+}
+
+func (c *CommonIDWithInformations) TaskParameter(ps Parameters) TaskParameter {
+	return c.Informations[0].TaskParameter(ps)
+}
+
+func (c *CommonIDWithInformations) Taskdefs() []string {
+	return c.Informations.Taskdefs()
+}
+
+func (infos Informations) LatestInformationsBySubdomain(subdomains []string) map[string]*CommonIDWithInformations {
+	availableSubdomain := make(map[string]bool, len(subdomains))
+	for _, v := range subdomains {
+		availableSubdomain[v] = true
+	}
+
+	ret := make(map[string]*CommonIDWithInformations, len(infos))
+	for _, info := range infos.SortByTaskCreatedDesc() {
+		v, ok := ret[info.SubDomain]
+		if !ok {
+			ret[info.SubDomain] = &CommonIDWithInformations{
+				CommonID:           info.CommonID,
+				Informations:       Informations{info},
+				AvailableSubdomain: availableSubdomain[info.SubDomain],
+			}
+		} else {
+			if v.CommonID == info.CommonID {
+				v.Informations = append(v.Informations, info)
+			}
+		}
+	}
+	return ret
 }
 
 type TaskParameter map[string]string

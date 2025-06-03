@@ -45,6 +45,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 	Auth      *Auth      `yaml:"auth"`
 	Purge     *Purge     `yaml:"purge"`
+	Recover   Recover    `yaml:"recover"`
 
 	compatV1  bool
 	localMode bool
@@ -202,6 +203,11 @@ type Network struct {
 	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
 }
 
+type Recover struct {
+	Enable             bool     `yaml:"enable"`
+	HookStoppedReasons []string `yaml:"hook_stopped_reasons"`
+}
+
 const DefaultPort = 80
 const DefaultProxyTimeout = 0
 const AuthCookieName = "mirage-ecs-auth"
@@ -237,6 +243,12 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		},
 		Auth:  nil,
 		Purge: nil,
+		Recover: Recover{
+			Enable: false,
+			HookStoppedReasons: []string{
+				"ECS is performing maintenance on the underlying infrastructure hosting the task",
+			},
+		},
 
 		localMode: p.LocalMode,
 		compatV1:  p.CompatV1,
