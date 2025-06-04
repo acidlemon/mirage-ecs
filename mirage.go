@@ -249,7 +249,7 @@ SYNC:
 					continue
 				}
 				slog.Info(f("Recovering: subdomain=%s common_id=%s short_id=%v", subdomain, v.CommonID, v.Informations.ShortIDs()))
-				if err := app.runner.Launch(ctx, subdomain, v.TaskParameter(app.Config.Parameter), LaunchTypeRelaunch, v.Taskdefs()...); err != nil {
+				if err := app.runner.Launch(ctx, subdomain, v.TaskParameter(app.Config.Parameter), true, v.Taskdefs()...); err != nil {
 					slog.Warn(err.Error())
 				}
 			}

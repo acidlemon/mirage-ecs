@@ -20,7 +20,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 		configParams mirageecs.Parameters
 		subdomain    string
 		commonID     string
-		launchType   mirageecs.LaunchType
+		isRelaunch   mirageecs.IsRelaunch
 		expectedKVP  []types.KeyValuePair
 		expectedTags []types.Tag
 		expectedEnv  map[string]string
@@ -39,7 +39,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			},
 			subdomain:  "testsubdomain",
 			commonID:   "xxx",
-			launchType: mirageecs.LaunchTypeLaunch,
+			isRelaunch: false,
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("dGVzdHN1YmRvbWFpbg==")},
 				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
@@ -74,7 +74,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			},
 			subdomain:  "testsubdomain",
 			commonID:   "xxx",
-			launchType: mirageecs.LaunchTypeLaunch,
+			isRelaunch: false,
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("testsubdomain")},
 				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
@@ -97,7 +97,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			compatV1: false,
 		},
 		{
-			name: "LaunchType=Relaunch",
+			name: "isRelaunch=true",
 			taskParam: mirageecs.TaskParameter{
 				"Param1": "Value1",
 				"Param2": "Value2",
@@ -109,7 +109,7 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 			},
 			subdomain:  "testsubdomain",
 			commonID:   "xxx",
-			launchType: mirageecs.LaunchTypeRelaunch,
+			isRelaunch: true,
 			expectedKVP: []types.KeyValuePair{
 				{Name: aws.String("SUBDOMAIN"), Value: aws.String("testsubdomain")},
 				{Name: aws.String("SUBDOMAINRAW"), Value: aws.String("testsubdomain")},
@@ -143,15 +143,15 @@ func TestToECSKeyValuePairsAndTags(t *testing.T) {
 				LocalMode: true,
 				CompatV1:  tt.compatV1,
 			})
-			kvpResult := tt.taskParam.ToECSKeyValuePairs(tt.subdomain, tt.configParams, cfg.EncodeSubdomain, tt.launchType)
+			kvpResult := tt.taskParam.ToECSKeyValuePairs(tt.subdomain, tt.configParams, cfg.EncodeSubdomain, tt.isRelaunch)
 			if diff := cmp.Diff(kvpResult, tt.expectedKVP, opt); diff != "" {
 				t.Errorf("Mismatch in KeyValuePairs (-got +want):\n%s", diff)
 			}
-			tagsResult := tt.taskParam.ToECSTags(tt.subdomain, tt.configParams, tt.commonID, tt.launchType)
+			tagsResult := tt.taskParam.ToECSTags(tt.subdomain, tt.configParams, tt.commonID, tt.isRelaunch)
 			if diff := cmp.Diff(tagsResult, tt.expectedTags, opt); diff != "" {
 				t.Errorf("Mismatch in Tags (-got +want):\n%s", diff)
 			}
-			envResult := tt.taskParam.ToEnv(tt.subdomain, tt.configParams, cfg.EncodeSubdomain, tt.launchType)
+			envResult := tt.taskParam.ToEnv(tt.subdomain, tt.configParams, cfg.EncodeSubdomain, tt.isRelaunch)
 			if diff := cmp.Diff(envResult, tt.expectedEnv, opt); diff != "" {
 				t.Errorf("Mismatch in Env (-got +want):\n%s", diff)
 			}
