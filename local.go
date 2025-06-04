@@ -170,7 +170,7 @@ func runMockServer(content string, info *Information) (int, func()) {
 			StoppedReason      *string `json:"stopped_reason"`
 		}{}
 		if err := c.Bind(&data); err != nil {
-			return c.String(http.StatusBadRequest, "bad request")
+			return c.JSON(http.StatusBadRequest, APICommonResponse{Result: "bad request"})
 		}
 		if v := data.LastStatusInStopAt; v != nil {
 			switch *v {
@@ -179,7 +179,7 @@ func runMockServer(content string, info *Information) (int, func()) {
 			case "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED":
 				// pass
 			default:
-				return c.String(http.StatusBadRequest, "bad request")
+				return c.JSON(http.StatusBadRequest, APICommonResponse{Result: "bad request"})
 			}
 		}
 		if v := data.StoppedReason; v != nil {
@@ -189,7 +189,9 @@ func runMockServer(content string, info *Information) (int, func()) {
 		info.task.DesiredStatus = aws.String(statusStopped)
 		syncTaskToInfomation(info)
 		go func() { stopServerFunc() }()
-		return c.String(http.StatusOK, "OK")
+		return c.JSON(http.StatusOK, APICommonResponse{
+			Result: "ok",
+		})
 	})
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, content)
