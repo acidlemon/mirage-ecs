@@ -494,33 +494,31 @@ link:
 
 ## mirage recover
 
-mirage recover feature enables, if a reverse proxy is available and tasks are stopped, mirage-ecs will automatically relaunch the subdomain if all stopped tasks meet the following conditions:
+The mirage recover feature allows mirage-ecs to automatically relaunch a subdomain if a reverse proxy is available and one or more tasks are stopped. This occurs when all stopped tasks beneath the subdomain meet the following conditions:
 
-- All stopped tasks that are down were previously in `RUNNING` state
-- All stopped tasks have a `StoppedReason` that matches one of the `hook_stopped_reasons`
+- All stopped tasks were previously in the `RUNNING` state
+- The `StoppedReason` of all stopped tasks matches one of the configured `hook_stopped_reasons`
 
-This feature allows you to automatically relaunch subdomain if the task is stoppd without going through mirage due to FARGATE maintenance, etc.
+This feature is useful for automatically relaunching a subdomain if tasks are unexpectedly stopped, such as due to FARGATE maintenance.
 
-The following tags and environment variables are added to the task to be relaunched.
+When a task is relaunched, the following tag and environment variable are added:
 
 - Tag: `Relaunch=1`
 - Env: `RELAUNCH=1`
 
-This is useful for varying task startup behavior between launch and relaunch. (e.g. Skip DB initialization process on relaunch.)
+This allows you to implement different startup behavior between an initial launch and a relaunch (e.g. skipping database initialization on relaunch).
 
-To enable mirage recover, Set the `enable` section to `true`.
+To enable the mirage recover feature, set the following in your configuration file:
 
 ```yaml
 recover:
   enable: true
   hook_stopped_reasons:
-    - hoge
-    - fuga
+    - `StoppedReason` phrases you want to catch
+    - others...
 ```
 
-The `hook_stopped_reasons` section is optional.
-
-If omitted, it is equivalent to the following setting:
+The `hook_stopped_reasons` section is optional. If omitted, it defaults to:
 
 ```yaml
 recover:
