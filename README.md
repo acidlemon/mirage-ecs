@@ -497,7 +497,7 @@ link:
 mirage recover feature enables, if a reverse proxy is available and tasks are stopped, mirage-ecs will automatically relaunch the subdomain if all stopped tasks meet the following conditions:
 
 - All stopped tasks that are down were previously in `RUNNING` state
-- All stopped tasks have a "StoppedReason" that matches one of the "hook\_stopped\_reasons"
+- All stopped tasks have a `StoppedReason` that matches one of the `hook_stopped_reasons`
 
 This feature allows you to automatically relaunch subdomain if the task is stoppd without going through mirage due to FARGATE maintenance, etc.
 
@@ -506,7 +506,7 @@ The following tags and environment variables are added to the task to be relaunc
 - Tag: `Relaunch=1`
 - Env: `RELAUNCH=1`
 
-This is useful for skipping initialization processes of tasks.
+This is useful for varying task startup behavior between launch and relaunch. (e.g. Skip DB initialization process on relaunch.)
 
 To enable mirage recover, Set the `enable` section to `true`.
 
@@ -518,7 +518,7 @@ recover:
     - fuga
 ```
 
-The `hook\_stopped\_reasons` section is optional.
+The `hook_stopped_reasons` section is optional.
 
 If omitted, it is equivalent to the following setting:
 
