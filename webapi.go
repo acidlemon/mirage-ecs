@@ -206,7 +206,7 @@ func (api *WebApi) launch(c echo.Context) (int, error) {
 	} else {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), APICallTimeout)
 		defer cancel()
-		err := api.runner.Launch(ctx, subdomain, parameter, false, taskdefs...)
+		err := api.runner.Launch(ctx, subdomain, parameter, taskdefs...)
 		if err != nil {
 			slog.Error(f("launch failed: %s", err))
 			return http.StatusInternalServerError, err
@@ -339,6 +339,9 @@ func (api *WebApi) LoadParameter(getFunc func(string) string) (TaskParameter, er
 	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {
+		if v.Internal {
+			continue
+		}
 		param := getFunc(v.Name)
 		if param == "" && v.Default != "" {
 			param = v.Default

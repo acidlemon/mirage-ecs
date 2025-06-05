@@ -12,6 +12,7 @@
           <div class="form-text">*Required</div>
         </div>
         {{ range $param := .Parameters }}
+          {{ if $param.Internal }}{{ continue }}{{ end }}
         <div class="mb-3">
           <label for="{{ $param.Name }}" class="form-label">{{ $param.Name }}</label>
           {{ if $param.Options }}

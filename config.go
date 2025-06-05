@@ -45,7 +45,7 @@ type Config struct {
 	Link      Link       `yaml:"link"`
 	Auth      *Auth      `yaml:"auth"`
 	Purge     *Purge     `yaml:"purge"`
-	Recover   Recover    `yaml:"recover"`
+	Recover   *Recover   `yaml:"recover"`
 
 	compatV1  bool
 	localMode bool
@@ -181,6 +181,7 @@ type Parameter struct {
 	Default     string            `yaml:"default"`
 	Description string            `yaml:"description"`
 	Options     []ParameterOption `yaml:"options"`
+	Internal    bool              `yaml:"-"`
 }
 
 type ParameterOption struct {
@@ -201,11 +202,6 @@ type ConfigParams struct {
 
 type Network struct {
 	ProxyTimeout time.Duration `yaml:"proxy_timeout"`
-}
-
-type Recover struct {
-	Enable             bool     `yaml:"enable"`
-	HookStoppedReasons []string `yaml:"hook_stopped_reasons"`
 }
 
 const DefaultPort = 80
@@ -241,14 +237,9 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 		ECS: ECSCfg{
 			Region: os.Getenv("AWS_REGION"),
 		},
-		Auth:  nil,
-		Purge: nil,
-		Recover: Recover{
-			Enable: false,
-			HookStoppedReasons: []string{
-				"ECS is performing maintenance on the underlying infrastructure hosting the task",
-			},
-		},
+		Auth:    nil,
+		Purge:   nil,
+		Recover: nil,
 
 		localMode: p.LocalMode,
 		compatV1:  p.CompatV1,
@@ -302,6 +293,8 @@ func NewConfig(ctx context.Context, p *ConfigParams) (*Config, error) {
 	if addDefaultParameter {
 		cfg.Parameter = append(cfg.Parameter, DefaultParameter)
 	}
+
+	cfg.Parameter = cfg.Recover.AddOrSkipParameter(cfg.Parameter)
 
 	for _, v := range cfg.Parameter {
 		if v.Rule != "" {
