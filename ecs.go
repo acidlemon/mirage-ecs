@@ -174,7 +174,7 @@ func (infos Informations) LatestInformationsBySubdomain(subdomains []string) map
 
 type TaskParameter map[string]string
 
-func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string, isRelaunch IsRelaunch) []types.KeyValuePair {
+func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Parameters, enc func(string) string) []types.KeyValuePair {
 	kvp := make([]types.KeyValuePair, 0, len(p)+2)
 	kvp = append(kvp,
 		types.KeyValuePair{
@@ -186,7 +186,6 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 			Value: aws.String(subdomain),
 		},
 	)
-	kvp = isRelaunch.AppendECSKeyValuePairs(kvp)
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -200,7 +199,7 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 	return kvp
 }
 
-func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, commonID string, isRelaunch IsRelaunch) []types.Tag {
+func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, commonID string) []types.Tag {
 	tags := make([]types.Tag, 0, len(p)+3)
 	tags = append(tags,
 		types.Tag{
@@ -216,7 +215,6 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, comm
 			Value: aws.String(commonID),
 		},
 	)
-	tags = isRelaunch.AppendECSTags(tags)
 	for _, v := range configParams {
 		v := v
 		if p[v.Name] == "" {
@@ -230,8 +228,8 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters, comm
 	return tags
 }
 
-func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func(string) string, isRelaunch IsRelaunch) map[string]string {
-	kvp := p.ToECSKeyValuePairs(subdomain, configParams, enc, isRelaunch)
+func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func(string) string) map[string]string {
+	kvp := p.ToECSKeyValuePairs(subdomain, configParams, enc)
 	env := make(map[string]string, len(kvp))
 	for _, v := range kvp {
 		env[*v.Name] = *v.Value
@@ -279,7 +277,7 @@ func (r IsRelaunch) AppendECSTags(tags []types.Tag) []types.Tag {
 }
 
 type TaskRunner interface {
-	Launch(ctx context.Context, subdomain string, param TaskParameter, isRelaunch IsRelaunch, taskdefs ...string) error
+	Launch(ctx context.Context, subdomain string, param TaskParameter, taskdefs ...string) error
 	Logs(ctx context.Context, subdomain string, since time.Time, tail int) ([]string, error)
 	Trace(ctx context.Context, id string) (string, error)
 	Terminate(ctx context.Context, subdomain string) error
@@ -312,7 +310,7 @@ func (e *ECS) SetProxyControlChannel(ch chan *proxyControl) {
 	e.proxyControlCh = ch
 }
 
-func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter, commonID string, isRelaunch IsRelaunch) error {
+func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, option TaskParameter, commonID string) error {
 	cfg := e.cfg
 
 	slog.Info(f("launching task subdomain:%s taskdef:%s", subdomain, taskdef))
@@ -325,7 +323,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 
 	// override envs for each container in taskdef
 	ov := &types.TaskOverride{}
-	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter, cfg.EncodeSubdomain, isRelaunch)
+	env := option.ToECSKeyValuePairs(subdomain, cfg.Parameter, cfg.EncodeSubdomain)
 
 	for _, c := range tdOut.TaskDefinition.ContainerDefinitions {
 		name := *c.Name
@@ -339,7 +337,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	}
 	slog.Debug(f("Task Override: %v", ov))
 
-	tags := option.ToECSTags(subdomain, cfg.Parameter, commonID, isRelaunch)
+	tags := option.ToECSTags(subdomain, cfg.Parameter, commonID)
 	runtaskInput := &ecs.RunTaskInput{
 		CapacityProviderStrategy: cfg.ECS.capacityProviderStrategy,
 		Cluster:                  aws.String(cfg.ECS.Cluster),
@@ -378,7 +376,7 @@ func (e *ECS) launchTask(ctx context.Context, subdomain string, taskdef string, 
 	return nil
 }
 
-func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, isRelaunch IsRelaunch, taskdefs ...string) error {
+func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter, taskdefs ...string) error {
 	if infos, err := e.find(ctx, subdomain); err != nil {
 		return fmt.Errorf("failed to get subdomain %s: %w", subdomain, err)
 	} else if len(infos) > 0 {
@@ -401,7 +399,7 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 	for _, taskdef := range taskdefs {
 		taskdef := taskdef
 		eg.Go(func() error {
-			return e.launchTask(ctx, subdomain, taskdef, option, commonID, isRelaunch)
+			return e.launchTask(ctx, subdomain, taskdef, option, commonID)
 		})
 	}
 	return eg.Wait()
