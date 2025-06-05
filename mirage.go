@@ -243,13 +243,14 @@ SYNC:
 			slog.Warn(err.Error())
 		}
 
-		if cfg := app.Config.Recover; cfg.Enable {
+		if cfg := app.Config.Recover; cfg.IsEnable() {
 			for subdomain, v := range Informations(append(running, stopped...)).LatestInformationsBySubdomain(subdomains) {
 				if !v.ShouldBeRelaunch(cfg.HookStoppedReasons) {
 					continue
 				}
 				slog.Info(f("Recovering: subdomain=%s common_id=%s short_id=%v", subdomain, v.CommonID, v.Informations.ShortIDs()))
-				if err := app.runner.Launch(ctx, subdomain, v.TaskParameter(app.Config.Parameter), v.Taskdefs()...); err != nil {
+				param := cfg.RecoverTaskParameter(v.RestoreTaskParameter(app.Config.Parameter))
+				if err := app.runner.Launch(ctx, subdomain, param, v.Taskdefs()...); err != nil {
 					slog.Warn(err.Error())
 				}
 			}
