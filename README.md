@@ -501,31 +501,7 @@ The mirage recover feature allows mirage-ecs to automatically relaunch a subdoma
 
 This feature is useful for automatically relaunching a subdomain if tasks are unexpectedly stopped, such as due to FARGATE maintenance.
 
-When a task is relaunched, the following tag and environment variable are added:
-
-- Tag: `Relaunch=1`
-- Env: `RELAUNCH=1`
-
-This allows you to implement different startup behavior between an initial launch and a relaunch (e.g. skipping database initialization on relaunch).
-
-To enable the mirage recover feature, set the following in your configuration file:
-
-```yaml
-recover:
-  enable: true
-  hook_stopped_reasons:
-    - `StoppedReason` phrases you want to catch
-    - others...
-```
-
-The `hook_stopped_reasons` section is optional. If omitted, it defaults to:
-
-```yaml
-recover:
-  enable: true
-  hook_stopped_reasons:
-    - "ECS is performing maintenance on the underlying infrastructure hosting the task"
-```
+TODO...
 
 ## API Documents
 
