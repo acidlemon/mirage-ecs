@@ -49,11 +49,10 @@ func (r *Recover) RecoverTaskParameter(param TaskParameter) TaskParameter {
 	if !r.IsEnable() {
 		return param
 	}
-	return lo.MapValues(param, func(v string, k string) string {
-		if k == r.Parameter.Name {
-			return r.Parameter.Default
-		} else {
-			return v
-		}
-	})
+	ret := make(TaskParameter, len(param)+1)
+	for k, v := range param {
+		ret[k] = v
+	}
+	ret[r.Parameter.Name] = r.Parameter.Default
+	return ret
 }
