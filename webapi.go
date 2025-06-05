@@ -339,6 +339,9 @@ func (api *WebApi) LoadParameter(getFunc func(string) string) (TaskParameter, er
 	parameter := make(TaskParameter)
 
 	for _, v := range api.cfg.Parameter {
+		if v.Internal {
+			continue
+		}
 		param := getFunc(v.Name)
 		if param == "" && v.Default != "" {
 			param = v.Default
