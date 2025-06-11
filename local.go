@@ -188,7 +188,11 @@ func runMockServer(content string, info *Information) (int, func()) {
 		info.task.LastStatus = aws.String(statusStopped)
 		info.task.DesiredStatus = aws.String(statusStopped)
 		syncTaskToInfomation(info)
-		go func() { stopServerFunc() }()
+		go func() {
+			if stopServerFunc != nil {
+				stopServerFunc()
+			}
+		}()
 		return c.JSON(http.StatusOK, APICommonResponse{
 			Result: "ok",
 		})
