@@ -1,8 +1,6 @@
 module github.com/acidlemon/mirage-ecs/v2
 
-go 1.23.0
-
-toolchain go1.23.3
+go 1.24.0
 
 require (
 	github.com/ReneKroon/ttlcache/v2 v2.11.0
@@ -23,7 +21,7 @@ require (
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
 	github.com/samber/lo v1.38.1
 	github.com/winebarrel/cronplan v1.10.1
-	golang.org/x/sync v0.12.0
+	golang.org/x/sync v0.18.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -53,11 +51,11 @@ require (
 	github.com/shogo82148/go-retry v1.0.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20230725012225-302865e7556b // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
