@@ -1,4 +1,4 @@
-FROM golang:1.23 AS builder
+FROM golang:1.25 AS builder
 
 ADD . /stash/src/github.com/acidlemon/mirage-ecs
 WORKDIR /stash/src/github.com/acidlemon/mirage-ecs
@@ -16,7 +16,7 @@ COPY --from=builder /stash/mirage-ecs /opt/mirage/
 COPY --from=builder /stash/example-config.yml /opt/mirage/
 COPY --from=builder /stash/html/* /opt/mirage/html/
 WORKDIR /opt/mirage
-ENV MIRAGE_LOG_LEVEL info
-ENV MIRAGE_CONF ""
+ENV MIRAGE_LOG_LEVEL=info
+ENV MIRAGE_CONF=""
 RUN /opt/mirage/mirage-ecs -version
 ENTRYPOINT ["/opt/mirage/mirage-ecs"]
