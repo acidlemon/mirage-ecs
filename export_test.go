@@ -1,6 +1,7 @@
 package mirageecs
 
 var (
-	ValidateSubdomain = validateSubdomain
-	NewHTTPTransport  = newHTTPTransport
+	ValidateSubdomain        = validateSubdomain
+	NewHTTPTransport         = newHTTPTransport
+	LinkShouldRegisterRecord = (*Link).shouldRegisterRecord
 )

@@ -63,6 +63,9 @@ link:
   default_task_definitions:
     - test-task-definition
     - test-task-definition-link
+  exclude_containers:
+    - dd-agent
+    - log-router
 `
 
 	if err := ioutil.WriteFile(f.Name(), []byte(data), 0644); err != nil {
@@ -123,5 +126,11 @@ link:
 	}
 	if cfg.Link.DefaultTaskDefinitions[1] != "test-task-definition-link" {
 		t.Error("could not parse link default task definitions")
+	}
+	if cfg.Link.ExcludeContainers[0] != "dd-agent" {
+		t.Error("could not parse link exclude containers")
+	}
+	if cfg.Link.ExcludeContainers[1] != "log-router" {
+		t.Error("could not parse link exclude containers")
 	}
 }
