@@ -34,6 +34,107 @@ var e2eRequestsJSON = map[string]string{
 	"/api/terminate": `{"subdomain":"mytask"}`,
 }
 
+func TestApiListStatusFilter(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := mirageecs.NewConfig(ctx, &mirageecs.ConfigParams{
+		LocalMode: true,
+		Domain:    "localtest.me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := mirageecs.New(context.Background(), cfg)
+	ts := httptest.NewServer(m.WebApi)
+	defer ts.Close()
+	client := ts.Client()
+
+	apiList := func(status string) mirageecs.APIListResponse {
+		u := ts.URL + "/api/list"
+		if status != "" {
+			u += "?status=" + status
+		}
+		res, err := client.Get(u)
+		if err != nil {
+			t.Fatalf("GET %s: %s", u, err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("status code should be 200: %d", res.StatusCode)
+		}
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		return r
+	}
+
+	launch := func(subdomain string) {
+		body := `{"subdomain":"` + subdomain + `","taskdef":["dummy"],"branch":"main"}`
+		req, _ := http.NewRequest("POST", ts.URL+"/api/launch", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("launch %s: %s", subdomain, err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("launch status code should be 200: %d", res.StatusCode)
+		}
+	}
+
+	terminate := func(subdomain string) {
+		body := `{"subdomain":"` + subdomain + `"}`
+		req, _ := http.NewRequest("POST", ts.URL+"/api/terminate", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("terminate %s: %s", subdomain, err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("terminate status code should be 200: %d", res.StatusCode)
+		}
+	}
+
+	// Launch task-a and task-b, then terminate task-b.
+	// Expected state: task-a=RUNNING, task-b=STOPPED
+	launch("task-a")
+	launch("task-b")
+	terminate("task-b")
+
+	t.Run("default returns only running", func(t *testing.T) {
+		r := apiList("")
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 running task, got %d", len(r.Result))
+		}
+		if len(r.Result) > 0 && r.Result[0].SubDomain != "task-a" {
+			t.Errorf("expected task-a, got %s", r.Result[0].SubDomain)
+		}
+	})
+
+	t.Run("status=running returns only running", func(t *testing.T) {
+		r := apiList("running")
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 running task, got %d", len(r.Result))
+		}
+	})
+
+	t.Run("status=stopped returns only stopped", func(t *testing.T) {
+		r := apiList("stopped")
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 stopped task, got %d", len(r.Result))
+		}
+		if len(r.Result) > 0 && r.Result[0].SubDomain != "task-b" {
+			t.Errorf("expected task-b, got %s", r.Result[0].SubDomain)
+		}
+	})
+
+	t.Run("status=all returns both running and stopped", func(t *testing.T) {
+		r := apiList("all")
+		if len(r.Result) != 2 {
+			t.Errorf("expected 2 tasks (1 running + 1 stopped), got %d", len(r.Result))
+		}
+	})
+}
+
 func TestE2EAPI(t *testing.T) {
 	t.Run("form v1", func(t *testing.T) {
 		testE2EAPI(t, e2eRequestsForm, "application/x-www-form-urlencoded", true)
