@@ -6,11 +6,11 @@ import (
 	mirageecs "github.com/acidlemon/mirage-ecs/v2"
 )
 
-func TestLinkShouldRegisterRecord(t *testing.T) {
-	t.Run("returns false when hosted_zone_id is not set", func(t *testing.T) {
+func TestLinkIsExcluded(t *testing.T) {
+	t.Run("returns true when hosted_zone_id is not set", func(t *testing.T) {
 		link := &mirageecs.Link{}
-		if mirageecs.LinkShouldRegisterRecord(link, "httpd") {
-			t.Errorf("should not register record when hosted_zone_id is not set")
+		if !mirageecs.LinkIsExcluded(link, "httpd") {
+			t.Errorf("should be excluded when hosted_zone_id is not set")
 		}
 	})
 
@@ -23,20 +23,20 @@ func TestLinkShouldRegisterRecord(t *testing.T) {
 			name     string
 			expected bool
 		}{
-			// should register
-			{"httpd", true},
-			{"app", true},
-			{"sidecar", true}, // "sidecar-*" requires a suffix, so "sidecar" itself is not excluded
+			// not excluded
+			{"httpd", false},
+			{"app", false},
+			{"sidecar", false}, // "sidecar-*" requires a suffix, so "sidecar" itself is not excluded
 			// excluded by exact match
-			{"log-router", false},
-			{"dd-agent", false},
+			{"log-router", true},
+			{"dd-agent", true},
 			// excluded by wildcard
-			{"sidecar-agent", false},
-			{"sidecar-metrics", false},
+			{"sidecar-agent", true},
+			{"sidecar-metrics", true},
 		}
 		for _, c := range cases {
-			if got := mirageecs.LinkShouldRegisterRecord(link, c.name); got != c.expected {
-				t.Errorf("shouldRegisterRecord(%q) = %v, want %v", c.name, got, c.expected)
+			if got := mirageecs.LinkIsExcluded(link, c.name); got != c.expected {
+				t.Errorf("isExcluded(%q) = %v, want %v", c.name, got, c.expected)
 			}
 		}
 	})

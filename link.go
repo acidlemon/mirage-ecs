@@ -2,14 +2,14 @@ package mirageecs
 
 import "path"
 
-func (l *Link) shouldRegisterRecord(containerName string) bool {
+func (l *Link) isExcluded(containerName string) bool {
 	if l.HostedZoneID == "" {
-		return false
+		return true
 	}
 	for _, excluded := range l.ExcludeContainers {
 		if m, _ := path.Match(excluded, containerName); m {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
