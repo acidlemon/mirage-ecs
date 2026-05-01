@@ -165,9 +165,33 @@ func (api *WebApi) Trace(c echo.Context) error {
 }
 
 func (api *WebApi) ApiList(c echo.Context) error {
-	info, err := api.runner.List(c.Request().Context(), statusRunning)
-	if err != nil {
-		return c.JSON(500, APIListResponse{})
+	ctx := c.Request().Context()
+	status := c.QueryParam("status")
+
+	var info []*Information
+	switch status {
+	case "stopped":
+		var err error
+		info, err = api.runner.List(ctx, statusStopped)
+		if err != nil {
+			return c.JSON(500, APIListResponse{})
+		}
+	case "all":
+		running, err := api.runner.List(ctx, statusRunning)
+		if err != nil {
+			return c.JSON(500, APIListResponse{})
+		}
+		stopped, err := api.runner.List(ctx, statusStopped)
+		if err != nil {
+			return c.JSON(500, APIListResponse{})
+		}
+		info = append(running, stopped...)
+	default:
+		var err error
+		info, err = api.runner.List(ctx, statusRunning)
+		if err != nil {
+			return c.JSON(500, APIListResponse{})
+		}
 	}
 	return c.JSON(200, APIListResponse{Result: info})
 }

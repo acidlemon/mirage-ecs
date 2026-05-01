@@ -493,7 +493,11 @@ GET APIs only accept URL query parameters.
 
 ### `GET /api/list`
 
-`/api/list` returns list of running tasks.
+`/api/list` returns list of tasks.
+
+| Query Parameter | Description |
+| --- | --- |
+| `status` | Filter by task status. `running` (default), `stopped`, or `all` |
 
 ```json
 {
