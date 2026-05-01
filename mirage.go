@@ -216,7 +216,9 @@ SYNC:
 				available[info.SubDomain] = true
 				for name, port := range info.PortMap {
 					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
-					r53.Add(name+"."+info.SubDomain, info.IPAddress)
+					if app.Config.Link.shouldRegisterRecord(name) {
+						r53.Add(name+"."+info.SubDomain, info.IPAddress)
+					}
 				}
 			}
 		}
