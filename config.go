@@ -567,7 +567,7 @@ func (c *Config) downloadHTMLFromS3(ctx context.Context) error {
 		Bucket:    aws.String(bucket),
 		Prefix:    aws.String(keyPrefix),
 		Delimiter: aws.String("/"),
-		MaxKeys:   100, // sufficient for html template files
+		MaxKeys:   aws.Int32(100), // sufficient for html template files
 	})
 	if err != nil {
 		return err
