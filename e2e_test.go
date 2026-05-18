@@ -130,6 +130,45 @@ func testE2EAPI(t *testing.T, reqs map[string]string, contentType string, compat
 		}
 	})
 
+	t.Run("/api/list?status=running after launched", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/list?status=running")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 running task, got %d", len(r.Result))
+		}
+	})
+
+	t.Run("/api/list?status=stopped after launched", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/list?status=stopped")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if len(r.Result) != 0 {
+			t.Errorf("expected 0 stopped tasks, got %d", len(r.Result))
+		}
+	})
+
+	t.Run("/api/list?status=all after launched", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/list?status=all")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 task, got %d", len(r.Result))
+		}
+	})
+
 	t.Run("/api/access", func(t *testing.T) {
 		res, err := client.Get(ts.URL + "/api/access?subdomain=mytask&duration=300")
 		if err != nil {
@@ -204,6 +243,35 @@ func testE2EAPI(t *testing.T, reqs map[string]string, contentType string, compat
 		json.NewDecoder(res.Body).Decode(&r)
 		if len(r.Result) != 0 {
 			t.Errorf("result should be empty %#v", r)
+		}
+	})
+
+	t.Run("/api/list?status=stopped after terminate", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/list?status=stopped")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 stopped task, got %d", len(r.Result))
+		}
+		if len(r.Result) > 0 && r.Result[0].SubDomain != "mytask" {
+			t.Errorf("subdomain should be mytask, got %s", r.Result[0].SubDomain)
+		}
+	})
+
+	t.Run("/api/list?status=all after terminate", func(t *testing.T) {
+		res, err := client.Get(ts.URL + "/api/list?status=all")
+		if err != nil {
+			t.Error(err)
+		}
+		defer res.Body.Close()
+		var r mirageecs.APIListResponse
+		json.NewDecoder(res.Body).Decode(&r)
+		if len(r.Result) != 1 {
+			t.Errorf("expected 1 task, got %d", len(r.Result))
 		}
 	})
 
