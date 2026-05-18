@@ -216,7 +216,9 @@ SYNC:
 				available[info.SubDomain] = true
 				for name, port := range info.PortMap {
 					rp.AddSubdomain(info.SubDomain, info.IPAddress, port)
-					r53.Add(name+"."+info.SubDomain, info.IPAddress)
+					if !app.Config.Link.isExcluded(name) {
+						r53.Add(name+"."+info.SubDomain, info.IPAddress)
+					}
 				}
 			}
 		}
@@ -229,7 +231,9 @@ SYNC:
 		for _, info := range stopped {
 			slog.Debug(f("stopped task %s", info.ID))
 			for name := range info.PortMap {
-				r53.Delete(name+"."+info.SubDomain, info.IPAddress)
+				if !app.Config.Link.isExcluded(name) {
+					r53.Delete(name+"."+info.SubDomain, info.IPAddress)
+				}
 			}
 		}
 

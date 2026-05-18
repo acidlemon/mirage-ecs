@@ -157,6 +157,7 @@ type Host struct {
 type Link struct {
 	HostedZoneID           string   `yaml:"hosted_zone_id"`
 	DefaultTaskDefinitions []string `yaml:"default_task_definitions"`
+	ExcludeContainers      []string `yaml:"exclude_containers"`
 }
 
 type Listen struct {
