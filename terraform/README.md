@@ -49,9 +49,22 @@ $ curl https://test1.dev.your.example.com/
 $ curl https://mirage.dev.your.example.com/api/terminate -d subdomain=test1
 ```
 
+#### Testing a locally built image
+
+To verify changes in your working tree (e.g. before merging a pull request), build the image locally, push it to the ECR repository created by terraform, and deploy it:
+
+```console
+$ make deploy/image
+```
+
+This builds the image from the repository root with `docker/Dockerfile`, tags it with the current git commit hash (override with `TAG=...`), pushes it to ECR, and deploys with the `IMAGE` environment variable pointing to it.
+
+To go back to the official image, run `make deploy` (or `ecspresso deploy`) without `IMAGE`.
+
 #### Customization
 
 - `terraform apply -var project=... -var region=...` changes the resource name prefix and the region.
+- `IMAGE` overrides the whole image URI of mirage-ecs. Without it, the official image `ghcr.io/acidlemon/mirage-ecs` with the `VERSION` tag is used.
 - `config.yaml` is the mirage-ecs configuration uploaded to S3. After editing it, run `make deploy/config` (or `terraform apply`) to upload. `make diff` / `make deploy` wrap `ecspresso diff` / `ecspresso deploy` as well.
 - This example does not enable any authentication. To restrict access, use mirage-ecs token authentication (`auth` section in `config.yaml` with `MIRAGE_TOKEN`) or ALB listener rules. See the top-level README for details.
 

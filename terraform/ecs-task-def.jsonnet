@@ -2,6 +2,8 @@ local env = std.native('env');
 local must_env = std.native('must_env');
 local tfstate = std.native('tfstate');
 local bucket = tfstate('aws_s3_bucket.mirage-ecs.bucket');
+// IMAGE overrides the whole image URI (e.g. a locally built image pushed to ECR).
+local image = env('IMAGE', 'ghcr.io/acidlemon/mirage-ecs:' + env('VERSION', 'v2.2.4'));
 {
   family: 'mirage-ecs',
   cpu: '256',
@@ -16,7 +18,7 @@ local bucket = tfstate('aws_s3_bucket.mirage-ecs.bucket');
   containerDefinitions: [
     {
       name: 'mirage-ecs',
-      image: 'ghcr.io/acidlemon/mirage-ecs:' + env('VERSION', 'v2.2.4'),
+      image: image,
       portMappings: [
         {
           containerPort: 80,
