@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -243,10 +244,8 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 	}
 
 	r.domainMap[subdomain] = ph
-	for _, name := range r.domains {
-		if name == subdomain {
-			return
-		}
+	if slices.Contains(r.domains, subdomain) {
+		return
 	}
 	r.domains = append(r.domains, subdomain)
 }
