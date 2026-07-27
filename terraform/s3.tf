@@ -1,5 +1,6 @@
 resource "aws_s3_bucket" "mirage-ecs" {
-  bucket = format("mirage-%s", replace(var.domain, ".", "-"))
+  bucket        = format("mirage-%s", replace(var.domain, ".", "-"))
+  force_destroy = true
 }
 
 resource "aws_s3_object" "config" {

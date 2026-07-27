@@ -1,9 +1,10 @@
-resource "aws_route53_zone" "mirage-ecs" {
+// The hosted zone is managed by the dns/ state. Apply dns/ once before this state.
+data "aws_route53_zone" "main" {
   name = var.domain
 }
 
 resource "aws_route53_record" "mirage-ecs" {
-  zone_id = aws_route53_zone.mirage-ecs.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = "mirage.${var.domain}"
   type    = "A"
   alias {
@@ -14,7 +15,7 @@ resource "aws_route53_record" "mirage-ecs" {
 }
 
 resource "aws_route53_record" "mirage-tasks" {
-  zone_id = aws_route53_zone.mirage-ecs.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = "*.${var.domain}"
   type    = "A"
   alias {
@@ -25,7 +26,7 @@ resource "aws_route53_record" "mirage-tasks" {
 }
 
 resource "aws_route53_record" "validation" {
-  zone_id = aws_route53_zone.mirage-ecs.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   for_each = {
     for dvo in aws_acm_certificate.mirage-ecs.domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name

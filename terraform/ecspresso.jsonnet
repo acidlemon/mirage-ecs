@@ -1,5 +1,7 @@
+local must_env = std.native('must_env');
 {
-  region: 'ap-northeast-1',
+  region: must_env('AWS_REGION'),
+  // must be the same as var.project in the terraform configuration
   cluster: 'mirage-ecs',
   service: 'mirage-ecs',
   service_definition: 'ecs-service-def.jsonnet',
@@ -7,10 +9,10 @@
   timeout: '10m0s',
   plugins: [
     {
-      name: "tfstate",
+      name: 'tfstate',
       config: {
-        url: "terraform.tfstate"
+        path: 'terraform.tfstate',
       },
     },
-  ]
+  ],
 }

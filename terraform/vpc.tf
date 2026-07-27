@@ -1,3 +1,7 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   tags = {
@@ -8,7 +12,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public-a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "ap-northeast-1a"
+  availability_zone = data.aws_availability_zones.available.names[0]
   tags = {
     Name = "${var.project}-public-a"
   }
@@ -17,7 +21,7 @@ resource "aws_subnet" "public-a" {
 resource "aws_subnet" "public-c" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.2.0/24"
-  availability_zone = "ap-northeast-1c"
+  availability_zone = data.aws_availability_zones.available.names[1]
   tags = {
     Name = "${var.project}-public-c"
   }
@@ -26,7 +30,7 @@ resource "aws_subnet" "public-c" {
 resource "aws_subnet" "public-d" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.3.0/24"
-  availability_zone = "ap-northeast-1d"
+  availability_zone = data.aws_availability_zones.available.names[2]
   tags = {
     Name = "${var.project}-public-d"
   }
