@@ -39,8 +39,8 @@ type Template struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	if m, ok := data.(map[string]interface{}); ok {
+func (t *Template) Render(w io.Writer, name string, data any, c echo.Context) error {
+	if m, ok := data.(map[string]any); ok {
 		m["Version"] = Version
 		return t.templates.ExecuteTemplate(w, name, m)
 	} else {
@@ -86,7 +86,7 @@ func NewWebApi(cfg *Config, runner TaskRunner) *WebApi {
 }
 
 func (api *WebApi) Top(c echo.Context) error {
-	return c.Render(http.StatusOK, "layout.html", map[string]interface{}{})
+	return c.Render(http.StatusOK, "layout.html", map[string]any{})
 }
 
 func (api *WebApi) List(c echo.Context) error {
@@ -113,7 +113,7 @@ func (api *WebApi) List(c echo.Context) error {
 		return true
 	})
 	info := append(infoRunning, infoStopped...)
-	value := map[string]interface{}{
+	value := map[string]any{
 		"info":  info,
 		"error": err,
 	}
@@ -127,7 +127,7 @@ func (api *WebApi) Launcher(c echo.Context) error {
 	} else {
 		taskdefs = []string{api.cfg.ECS.DefaultTaskDefinition}
 	}
-	return c.Render(http.StatusOK, "launcher.html", map[string]interface{}{
+	return c.Render(http.StatusOK, "launcher.html", map[string]any{
 		"DefaultTaskDefinitions": taskdefs,
 		"Parameters":             api.cfg.Parameter,
 	})

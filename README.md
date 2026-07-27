@@ -34,6 +34,7 @@ Requirements:
 - IAM Permissions to launch ECS tasks, and report metrics and get logs.
   - `iam:PassRole`
   - `ecs:RunTask`
+  - `ecs:TagResource`
   - `ecs:DescribeTasks`
   - `ecs:DescribeTaskDefinition`
   - `ecs:DescribeServices`

@@ -33,7 +33,7 @@ purge:
 	if next != time.Date(2024, 11, 7, 11, 24, 0, 0, time.UTC) {
 		t.Errorf("unexpected next time: %s", next)
 	}
-	if cfg.Purge.PurgeParams.Duration != time.Second * 300 {
+	if cfg.Purge.PurgeParams.Duration != time.Second*300 {
 		t.Errorf("unexpected duration: %d", cfg.Purge.PurgeParams.Duration)
 	}
 	if len(cfg.Purge.PurgeParams.Excludes) != 2 {

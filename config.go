@@ -66,7 +66,7 @@ type ECSCfg struct {
 }
 
 func (c ECSCfg) String() string {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"region":                     c.Region,
 		"cluster":                    c.Cluster,
 		"capacity_provider_strategy": c.capacityProviderStrategy,

@@ -20,7 +20,7 @@ type Auth struct {
 	CookieSecret string              `yaml:"cookie_secret"`
 
 	jwtParser  *jwt.Parser
-	jwtKeyFunc func(*jwt.Token) (interface{}, error)
+	jwtKeyFunc func(*jwt.Token) (any, error)
 	once       sync.Once
 }
 
@@ -112,7 +112,7 @@ func (a *Auth) ValidateAuthCookie(c *http.Cookie) error {
 	}
 	a.once.Do(func() {
 		a.jwtParser = jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-		a.jwtKeyFunc = func(token *jwt.Token) (interface{}, error) {
+		a.jwtKeyFunc = func(token *jwt.Token) (any, error) {
 			return []byte(a.CookieSecret), nil
 		}
 	})
@@ -207,7 +207,7 @@ func (a *AuthMethodAmznOIDC) Match(h http.Header) (bool, error) {
 	return a.MatchClaims(claims), nil
 }
 
-func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]interface{}) bool {
+func (a *AuthMethodAmznOIDC) MatchClaims(claims map[string]any) bool {
 	v, ok := claims[a.Claim]
 	if !ok {
 		slog.Warn(f("auth amzn_oidc claim[%s] not found in claims", a.Claim))

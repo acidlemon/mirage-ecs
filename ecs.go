@@ -86,7 +86,6 @@ func (p TaskParameter) ToECSKeyValuePairs(subdomain string, configParams Paramet
 		},
 	)
 	for _, v := range configParams {
-		v := v
 		if p[v.Name] == "" {
 			continue
 		}
@@ -111,7 +110,6 @@ func (p TaskParameter) ToECSTags(subdomain string, configParams Parameters) []ty
 		},
 	)
 	for _, v := range configParams {
-		v := v
 		if p[v.Name] == "" {
 			continue
 		}
@@ -128,7 +126,6 @@ func (p TaskParameter) ToEnv(subdomain string, configParams Parameters, enc func
 	env[EnvSubdomain] = enc(subdomain)
 	env[EnvSubdomainRaw] = subdomain
 	for _, v := range configParams {
-		v := v
 		if p[v.Name] == "" {
 			continue
 		}
@@ -264,7 +261,6 @@ func (e *ECS) Launch(ctx context.Context, subdomain string, option TaskParameter
 
 	var eg errgroup.Group
 	for _, taskdef := range taskdefs {
-		taskdef := taskdef
 		eg.Go(func() error {
 			return e.launchTask(ctx, subdomain, taskdef, option)
 		})
@@ -302,7 +298,6 @@ func (e *ECS) Logs(ctx context.Context, subdomain string, since time.Time, tail 
 	var eg errgroup.Group
 	var mu sync.Mutex
 	for _, info := range infos {
-		info := info
 		eg.Go(func() error {
 			l, err := e.logs(ctx, info, since, tail)
 			mu.Lock()
@@ -326,7 +321,6 @@ func (e *ECS) logs(ctx context.Context, info *Information, since time.Time, tail
 
 	streams := make(map[string][]string)
 	for _, c := range taskdefOut.TaskDefinition.ContainerDefinitions {
-		c := c
 		logConf := c.LogConfiguration
 		if logConf == nil {
 			continue
@@ -350,9 +344,7 @@ func (e *ECS) logs(ctx context.Context, info *Information, since time.Time, tail
 
 	logs := []string{}
 	for group, streamNames := range streams {
-		group := group
 		for _, stream := range streamNames {
-			stream := stream
 			slog.Debug(f("get log events from group:%s stream:%s start:%s", group, stream, since))
 			in := &cwlogs.GetLogEventsInput{
 				LogGroupName:  aws.String(group),
@@ -402,7 +394,6 @@ func (e *ECS) TerminateBySubdomain(ctx context.Context, subdomain string) error 
 		return nil
 	})
 	for _, info := range infos {
-		info := info
 		eg.Go(func() error {
 			return e.Terminate(ctx, info.ID)
 		})
@@ -454,7 +445,6 @@ func (e *ECS) List(ctx context.Context, desiredStatus string) ([]*Information, e
 		}
 
 		for _, task := range tasksOut.Tasks {
-			task := task
 			if getTagsFromTask(&task, TagManagedBy) != TagValueMirage {
 				// task is not managed by Mirage
 				continue
@@ -662,7 +652,6 @@ func (e *ECS) PutAccessCounts(ctx context.Context, all map[string]accessCount) e
 	// CloudWatch API has a limit of 20 metric data per request
 	var eg errgroup.Group
 	for _, chunk := range lo.Chunk(metricData, 20) {
-		chunk := chunk
 		eg.Go(func() error {
 			ctx, cancel := context.WithTimeout(ctx, APICallTimeout)
 			defer cancel()

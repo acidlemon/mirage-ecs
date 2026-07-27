@@ -3,45 +3,31 @@ variable "project" {
   default = "mirage-ecs"
 }
 
-provider "aws" {
-  region = "ap-northeast-1"
-  default_tags {
-    tags = {
-      "env" = "${var.project}"
-    }
-  }
-}
-
-terraform {
-  required_version = "= 1.4.6"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "= 4.65.0"
-    }
-  }
-}
-
-data "aws_caller_identity" "current" {
+variable "region" {
+  type    = string
+  default = "ap-northeast-1"
 }
 
 variable "domain" {
   type = string
 }
 
-variable "oauth_client_id" {
-  type    = string
-  default = ""
+provider "aws" {
+  region = var.region
+  default_tags {
+    tags = {
+      "env" = var.project
+    }
+  }
 }
 
-variable "oauth_client_secret" {
-  type    = string
-  default = ""
-}
+terraform {
+  required_version = ">= 1.8.0"
 
-provider "http" {}
-
-data "http" "oidc_configuration" {
-  url = "https://accounts.google.com/.well-known/openid-configuration"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
 }
