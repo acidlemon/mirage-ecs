@@ -1,5 +1,7 @@
+// bucket_prefix generates a unique bucket name for each apply, to avoid
+// the delay in reusing a bucket name after deletion.
 resource "aws_s3_bucket" "mirage-ecs" {
-  bucket        = format("mirage-%s", replace(var.domain, ".", "-"))
+  bucket_prefix = "${var.project}-"
   force_destroy = true
 }
 
