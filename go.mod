@@ -21,7 +21,7 @@ require (
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
 	github.com/samber/lo v1.38.1
 	github.com/winebarrel/cronplan v1.10.1
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
