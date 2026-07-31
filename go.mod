@@ -19,7 +19,7 @@ require (
 	github.com/kayac/go-config v0.7.0
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
-	github.com/samber/lo v1.38.1
+	github.com/samber/lo v1.53.0
 	github.com/winebarrel/cronplan v1.10.1
 	golang.org/x/sync v0.20.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -51,7 +51,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/exp v0.0.0-20230725012225-302865e7556b // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
