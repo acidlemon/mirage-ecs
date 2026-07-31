@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
 	github.com/brunoscheufler/aws-ecs-metadata-go v0.0.0-20221221133751-67e37ae746cd
 	github.com/fujiwara/go-amzn-oidc v0.0.7
-	github.com/fujiwara/tracer v1.0.2
+	github.com/fujiwara/tracer v1.1.3
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.5.9
 	github.com/kayac/go-config v0.7.0
