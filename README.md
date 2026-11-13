@@ -180,6 +180,10 @@ network:
 
 `proxy_timeout` default is 0 (means no timeout). If `proxy_timeout` is not 0, mirage-ecs timeouts the request to backends after the specified duration and returns HTTP status 504 (Gateway Timeout).
 
+The reverse proxy does not buffer responses. Streaming responses such as Server-Sent Events (`text/event-stream`) are delivered to clients in real time. WebSocket connections are also proxied, and they are subject to `require_auth_cookie` as well as other requests.
+
+If the reverse proxy fails to connect to the backend, mirage-ecs returns HTTP status 502 (Bad Gateway).
+
 #### `parameters` section
 
 `parameters` section configures parameters for launched ECS task for subdomains.

@@ -18,7 +18,6 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/kayac/go-config v0.7.0
 	github.com/labstack/echo/v4 v4.16.4
-	github.com/methane/rproxy v0.0.0-20130309122237-aafd1c66433b
 	github.com/samber/lo v1.53.0
 	github.com/winebarrel/cronplan v1.10.1
 	golang.org/x/sync v0.25.0
