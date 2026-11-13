@@ -15,13 +15,14 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags: -s -w -X main.Version={{.Version}} -X main.buildDate={{.Date}}
+    ldflags: -s -w -X main.buildDate={{.Date}}
 archives:
   - files:
       - config_sample.yml
       - html/*
 release:
   prerelease: auto
+  use_existing_draft: true
 checksum:
   name_template: "checksums.txt"
 snapshot:
