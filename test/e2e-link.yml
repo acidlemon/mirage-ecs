@@ -164,3 +164,10 @@ steps:
     exec:
       command: |
         {{ vars.records }} "ResourceRecordSets[?Name=='{{ vars.new_record }}'].ResourceRecords[0].Value"
+
+  no_rejected_changes:
+    desc: mirage-ecs has not sent a change batch which Route 53 rejects
+    exec:
+      command: |
+        ! grep InvalidChangeBatch "$MIRAGE_E2E_TMP/mirage-ecs.log"
+    test: current.exit_code == 0

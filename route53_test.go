@@ -2,6 +2,7 @@ package mirageecs_test
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ type mockRoute53 struct {
 	zoneName string
 	records  map[string][]string // name -> values
 	batches  [][]types.Change
+	listErrs []error // errors returned by ListResourceRecordSets, one per call
 }
 
 var _ mirageecs.Route53API = (*mockRoute53)(nil)
@@ -37,6 +39,11 @@ func (m *mockRoute53) GetHostedZone(ctx context.Context, in *route53.GetHostedZo
 }
 
 func (m *mockRoute53) ListResourceRecordSets(ctx context.Context, in *route53.ListResourceRecordSetsInput, _ ...func(*route53.Options)) (*route53.ListResourceRecordSetsOutput, error) {
+	if len(m.listErrs) > 0 {
+		err := m.listErrs[0]
+		m.listErrs = m.listErrs[1:]
+		return nil, err
+	}
 	// return the first record set at or after StartRecordName, like Route53
 	names := make([]string, 0, len(m.records))
 	for name := range m.records {
@@ -201,5 +208,36 @@ func TestRoute53DeleteDoesNotMatchNeighborRecord(t *testing.T) {
 	}
 	if _, ok := m.records["app.zzz.example.local."]; !ok {
 		t.Errorf("app.zzz should not be deleted")
+	}
+}
+
+func TestRoute53DeleteRetriesAfterLookupFailure(t *testing.T) {
+	m := newMockRoute53(map[string][]string{
+		"app.stopped.example.local.": {"10.0.0.1"},
+	})
+	m.listErrs = []error{errors.New("lookup failed")}
+	r := newTestRoute53(t, m)
+
+	// The failed lookup must not block the UPSERT.
+	r.Delete("app.stopped", "10.0.0.1")
+	r.Add("app.running", "10.0.0.2")
+	if err := r.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply should succeed: %s", err)
+	}
+	if got := m.records["app.running.example.local."]; len(got) != 1 || got[0] != "10.0.0.2" {
+		t.Errorf("app.running should be registered: %v", got)
+	}
+	if _, ok := m.records["app.stopped.example.local."]; !ok {
+		t.Errorf("app.stopped should not be deleted yet")
+	}
+
+	// The DELETE must be retried in the next sync, without waiting for
+	// the cache to expire.
+	r.Delete("app.stopped", "10.0.0.1")
+	if err := r.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply should succeed: %s", err)
+	}
+	if _, ok := m.records["app.stopped.example.local."]; ok {
+		t.Errorf("app.stopped should be deleted by the retry")
 	}
 }
