@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs the e2e test (test/e2e.yml) against an AWS emulator.
+# Runs the e2e tests (test/e2e.yml, test/e2e-link.yml) against an AWS emulator.
 # https://github.com/aws/aws-emulator
 #
 # Start the emulator with `aws-emulator --auth off` before running this.
@@ -21,33 +21,25 @@ unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_SESSION_TOKEN
 export MIRAGE_E2E_PORT="${MIRAGE_E2E_PORT:-18080}"
 export MIRAGE_E2E_ENDPOINT="http://127.0.0.1:$MIRAGE_E2E_PORT"
 
-tmp="$(mktemp -d)"
-mirage_pid=""
+MIRAGE_E2E_TMP="$(mktemp -d)"
+export MIRAGE_E2E_TMP
 cleanup() {
   status=$?
-  if [[ -n "$mirage_pid" ]]; then
-    kill "$mirage_pid" 2>/dev/null || true
-    wait "$mirage_pid" 2>/dev/null || true
-  fi
-  if [[ $status -ne 0 && -f "$tmp/mirage-ecs.log" ]]; then
+  ./test/e2e/mirage.sh stop || true
+  if [[ $status -ne 0 && -f "$MIRAGE_E2E_TMP/mirage-ecs.log" ]]; then
     echo "--- mirage-ecs.log" >&2
-    cat "$tmp/mirage-ecs.log" >&2
+    cat "$MIRAGE_E2E_TMP/mirage-ecs.log" >&2
   fi
-  rm -rf "$tmp"
+  rm -rf "$MIRAGE_E2E_TMP"
   exit $status
 }
 trap cleanup EXIT
 
-MIRAGE_E2E_ZONE_ID="$(./test/e2e/setup.sh "$tmp/config.yaml" | tail -n 1)"
+MIRAGE_E2E_ZONE_ID="$(./test/e2e/setup.sh "$MIRAGE_E2E_TMP/config.yaml" | tail -n 1)"
 export MIRAGE_E2E_ZONE_ID
 
-./mirage-ecs -conf "$tmp/config.yaml" > "$tmp/mirage-ecs.log" 2>&1 &
-mirage_pid=$!
-for _ in $(seq 1 30); do
-  if curl -fs -o /dev/null "$MIRAGE_E2E_ENDPOINT/"; then
-    break
-  fi
-  sleep 1
-done
+./test/e2e/mirage.sh start
 
-runn run test/e2e.yml --scopes run:exec --verbose < /dev/null
+for runbook in test/e2e.yml test/e2e-link.yml; do
+  runn run "$runbook" --scopes run:exec --verbose < /dev/null
+done
