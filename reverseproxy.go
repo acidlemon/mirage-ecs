@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"path"
 	"slices"
@@ -13,9 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	//	"github.com/acidlemon/go-dumper"
-	"github.com/methane/rproxy"
 )
 
 type proxyAction string
@@ -224,7 +222,6 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 			slog.Error(f("invalid destination url: %s %s", destUrlString, err))
 			continue
 		}
-		handler := rproxy.NewSingleHostReverseProxy(destUrl)
 		tp := &Transport{
 			Transport: newHTTPTransport(r.cfg.Network.ProxyTimeout),
 			Counter:   counter,
@@ -233,7 +230,7 @@ func (r *ReverseProxy) AddSubdomain(subdomain string, ipaddress string, targetPo
 		if v.RequireAuthCookie {
 			tp.AuthCookieValidateFunc = r.cfg.Auth.ValidateAuthCookie
 		}
-		handler.Transport = tp
+		handler := newUpstreamProxy(destUrl, tp)
 		ph.add(v.ListenPort, addr, handler)
 		proxy = true
 		slog.Info(f("add subdomain: %s:%d -> %s", subdomain, v.ListenPort, addr))
@@ -283,6 +280,47 @@ func (r *ReverseProxy) CollectAccessCounts() map[string]accessCount {
 		counts[subdomain] = counter.Collect()
 	}
 	return counts
+}
+
+// forwardedHeaders are the headers which httputil.ReverseProxy removes from
+// the outbound request before calling Rewrite.
+var forwardedHeaders = []string{
+	"Forwarded",
+	"X-Forwarded-For",
+	"X-Forwarded-Host",
+	"X-Forwarded-Proto",
+}
+
+// newUpstreamProxy creates a reverse proxy to the target.
+//
+// The proxy passes requests as transparently as possible: the Host header
+// and the raw query are not modified, and the forwarded headers of the
+// inbound request are preserved because mirage-ecs is supposed to run behind
+// a load balancer which sets them. The client address is appended to
+// X-Forwarded-For.
+func newUpstreamProxy(target *url.URL, tp http.RoundTripper) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Host = pr.In.Host
+			pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+			for _, name := range forwardedHeaders {
+				if v, ok := pr.In.Header[name]; ok {
+					pr.Out.Header[name] = slices.Clone(v)
+				}
+			}
+			if clientIP, _, err := net.SplitHostPort(pr.In.RemoteAddr); err == nil {
+				if prior := pr.Out.Header["X-Forwarded-For"]; len(prior) > 0 {
+					clientIP = strings.Join(prior, ", ") + ", " + clientIP
+				}
+				pr.Out.Header.Set("X-Forwarded-For", clientIP)
+			}
+		},
+		Transport: tp,
+		// Flush immediately after each write to the client, so that
+		// streaming responses are delivered in real time.
+		FlushInterval: -1,
+	}
 }
 
 func newHTTPTransport(t time.Duration) http.RoundTripper {
