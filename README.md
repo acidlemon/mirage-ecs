@@ -750,7 +750,10 @@ $ make test
 
 ### End-to-end test
 
-`make e2e` runs an end-to-end test against [AWS Emulator](https://github.com/aws/aws-emulator). It creates AWS resources on the emulator, starts mirage-ecs, and runs the scenario in [test/e2e.yml](test/e2e.yml) (launch, list, logs, mirage link, terminate) through the API.
+`make e2e` runs an end-to-end test against [AWS Emulator](https://github.com/aws/aws-emulator). It creates AWS resources on the emulator, starts mirage-ecs, and runs the scenarios through the API.
+
+- [test/e2e.yml](test/e2e.yml): task lifecycle (launch, list, logs, mirage link, terminate)
+- [test/e2e-link.yml](test/e2e-link.yml): mirage link with stopped tasks, across a restart of mirage-ecs
 
 This requires the AWS CLI and [runn](https://github.com/k1LoW/runn). Start the emulator before running the test.
 

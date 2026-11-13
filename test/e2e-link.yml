@@ -1,0 +1,166 @@
+# End-to-end test of mirage link against an AWS emulator.
+#
+#   make e2e
+#
+# See test/e2e.yml for how this runs.
+#
+# Route 53 rejects a whole change batch which has a DELETE for a record set
+# that does not exist. mirage-ecs has no memory of the records it deleted
+# after a restart, so it must not send such a DELETE for the stopped tasks,
+# otherwise the records of new tasks are not registered.
+#
+# This relies on the emulator stopping a task launched by RunTask about 10
+# seconds after the task gets RUNNING.
+desc: mirage link with stopped tasks
+vars:
+  zone_id: ${MIRAGE_E2E_ZONE_ID}
+  host: mirage.e2e.example.net
+  old: e2e-link-old
+  new: e2e-link-new
+  old_record: app.e2e-link-old.e2e.example.net.
+  new_record: app.e2e-link-new.e2e.example.net.
+  records: >-
+    aws route53 list-resource-record-sets --hosted-zone-id ${MIRAGE_E2E_ZONE_ID} --output json --query
+runners:
+  mirage:
+    endpoint: ${MIRAGE_E2E_ENDPOINT:-http://127.0.0.1:18080}
+steps:
+  launch_old:
+    desc: launch a task
+    mirage:
+      /api/launch:
+        post:
+          headers:
+            Host: "{{ vars.host }}"
+          body:
+            application/json:
+              subdomain: "{{ vars.old }}"
+              branch: topic/old
+              taskdef: ["mirage-e2e"]
+    test: current.res.status == 200
+
+  old_task:
+    desc: the task is listed with an IP address
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.res.status == 200
+        && len(current.res.body.result) == 1
+        && current.res.body.result[0].ipaddress != ""
+    mirage:
+      /api/list:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  old_record_added:
+    desc: the IP address of the task is registered
+    loop:
+      count: 15
+      interval: 1
+      until: |
+        current.exit_code == 0
+        && fromJSON(current.stdout) == [steps.old_task.res.body.result[0].ipaddress]
+    exec:
+      command: |
+        {{ vars.records }} "ResourceRecordSets[?Name=='{{ vars.old_record }}'].ResourceRecords[0].Value"
+
+  old_task_stopped:
+    desc: the task stops by itself
+    loop:
+      count: 40
+      interval: 1
+      until: |
+        current.res.status == 200
+        && any(current.res.body.result, {.id == steps.old_task.res.body.result[0].id})
+    mirage:
+      /api/list?status=stopped:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  old_record_deleted:
+    desc: the record of the stopped task is deleted
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.exit_code == 0
+        && fromJSON(current.stdout) == []
+    exec:
+      command: |
+        {{ vars.records }} "ResourceRecordSets[?Name=='{{ vars.old_record }}'].ResourceRecords[0].Value"
+
+  restart:
+    desc: restart mirage-ecs, which forgets that the record was deleted
+    exec:
+      command: ./test/e2e/mirage.sh restart
+    test: current.exit_code == 0
+
+  launch_new:
+    desc: launch another task
+    mirage:
+      /api/launch:
+        post:
+          headers:
+            Host: "{{ vars.host }}"
+          body:
+            application/json:
+              subdomain: "{{ vars.new }}"
+              branch: topic/new
+              taskdef: ["mirage-e2e"]
+    test: current.res.status == 200
+
+  new_task:
+    desc: the task is listed with an IP address
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.res.status == 200
+        && len(current.res.body.result) == 1
+        && current.res.body.result[0].ipaddress != ""
+    mirage:
+      /api/list:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  new_record_added:
+    desc: the IP address of the new task is registered while the old task is listed as stopped
+    loop:
+      count: 15
+      interval: 1
+      until: |
+        current.exit_code == 0
+        && fromJSON(current.stdout) == [steps.new_task.res.body.result[0].ipaddress]
+    exec:
+      command: |
+        {{ vars.records }} "ResourceRecordSets[?Name=='{{ vars.new_record }}'].ResourceRecords[0].Value"
+
+  new_task_stopped:
+    desc: the new task stops by itself
+    loop:
+      count: 40
+      interval: 1
+      until: |
+        current.res.status == 200
+        && any(current.res.body.result, {.id == steps.new_task.res.body.result[0].id})
+    mirage:
+      /api/list?status=stopped:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  new_record_deleted:
+    desc: the record of the new task is deleted
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.exit_code == 0
+        && fromJSON(current.stdout) == []
+    exec:
+      command: |
+        {{ vars.records }} "ResourceRecordSets[?Name=='{{ vars.new_record }}'].ResourceRecords[0].Value"
