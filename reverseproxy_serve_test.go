@@ -67,6 +67,10 @@ func TestReverseProxyRequest(t *testing.T) {
 	req.Header.Set("X-Forwarded-Port", "443")
 	req.Header.Set("X-Forwarded-Host", "app.example.net")
 	req.Header.Set("X-Custom", "custom")
+	// a client must not be able to remove the forwarded headers by
+	// nominating them as hop-by-hop headers.
+	req.Header.Set("Connection", "X-Forwarded-For, X-Forwarded-Proto, X-Hop")
+	req.Header.Set("X-Hop", "hop")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +96,9 @@ func TestReverseProxyRequest(t *testing.T) {
 	}
 	if got.URL.RawQuery != "a=1;b=2&c=%20" {
 		t.Errorf("query = %q, want %q", got.URL.RawQuery, "a=1;b=2&c=%20")
+	}
+	if v, ok := got.Header["X-Hop"]; ok {
+		t.Errorf("hop-by-hop request header X-Hop = %q, want removed", v)
 	}
 	for name, want := range map[string]string{
 		"X-Forwarded-For":   "192.0.2.1, 127.0.0.1",

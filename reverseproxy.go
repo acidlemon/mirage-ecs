@@ -298,6 +298,10 @@ var forwardedHeaders = []string{
 // inbound request are preserved because mirage-ecs is supposed to run behind
 // a load balancer which sets them. The client address is appended to
 // X-Forwarded-For.
+//
+// The forwarded headers are preserved even if the inbound Connection header
+// nominates them as hop-by-hop, otherwise a client could remove the values
+// set by the load balancer.
 func newUpstreamProxy(target *url.URL, tp http.RoundTripper) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
