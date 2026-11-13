@@ -1,0 +1,166 @@
+# End-to-end test of mirage-ecs against an AWS emulator.
+#
+#   make e2e
+#
+# test/e2e/run.sh creates the AWS resources on the emulator, starts mirage-ecs,
+# and runs this runbook. It never runs against real AWS.
+#
+# Limitations of the emulator:
+#
+# - It stops a task launched by RunTask about 10 seconds after the task gets
+#   RUNNING, so the steps between running and terminate must be quick.
+# - It removes the tags of a task on StopTask. mirage-ecs identifies tasks by
+#   the tags, so the terminated task is not listed as stopped and its Route 53
+#   record is not deleted. This runbook does not test them.
+# - It does not run containers, so the reverse proxy to a task is not tested.
+desc: mirage-ecs task lifecycle
+vars:
+  zone_id: ${MIRAGE_E2E_ZONE_ID}
+  host: mirage.e2e.example.net
+  subdomain: e2e-test
+  record: app.e2e-test.e2e.example.net.
+runners:
+  mirage:
+    endpoint: ${MIRAGE_E2E_ENDPOINT:-http://127.0.0.1:18080}
+steps:
+  list_empty:
+    desc: no tasks are running
+    mirage:
+      /api/list:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+    test: |
+      current.res.status == 200
+      && len(current.res.body.result) == 0
+
+  launch_without_required_parameter:
+    desc: launch fails without the required parameter
+    mirage:
+      /api/launch:
+        post:
+          headers:
+            Host: "{{ vars.host }}"
+          body:
+            application/json:
+              subdomain: "{{ vars.subdomain }}"
+              taskdef: ["mirage-e2e"]
+    test: current.res.status == 400
+
+  launch:
+    desc: launch a task
+    mirage:
+      /api/launch:
+        post:
+          headers:
+            Host: "{{ vars.host }}"
+          body:
+            application/json:
+              subdomain: "{{ vars.subdomain }}"
+              branch: topic/e2e
+              taskdef: ["mirage-e2e"]
+    test: |
+      current.res.status == 200
+      && current.res.body.result == "ok"
+
+  running:
+    desc: the task gets RUNNING
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.res.status == 200
+        && len(current.res.body.result) == 1
+        && current.res.body.result[0].last_status == "RUNNING"
+    mirage:
+      /api/list:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  task:
+    desc: the task has the parameters and an IP address
+    test: |
+      steps.running.res.body.result[0].subdomain == vars.subdomain
+      && steps.running.res.body.result[0].branch == "topic/e2e"
+      && hasPrefix(steps.running.res.body.result[0].taskdef, "mirage-e2e:")
+      && steps.running.res.body.result[0].ipaddress != ""
+
+  logs:
+    desc: logs of the task show the parameters passed to the container
+    mirage:
+      "/api/logs?subdomain={{ vars.subdomain }}":
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+    test: |
+      current.res.status == 200
+      && current.res.body.result == ["hello from e2e-test on topic/e2e"]
+
+  access:
+    desc: access counter of the task is readable
+    mirage:
+      "/api/access?subdomain={{ vars.subdomain }}&duration=300":
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+    test: |
+      current.res.status == 200
+      && current.res.body.result == "ok"
+      && current.res.body.sum == 0
+
+  record_added:
+    desc: mirage link registers the IP address of the task to Route 53
+    loop:
+      count: 15
+      interval: 1
+      until: |
+        current.exit_code == 0
+        && fromJSON(current.stdout) == [steps.running.res.body.result[0].ipaddress]
+    exec:
+      command: |
+        aws route53 list-resource-record-sets --hosted-zone-id {{ vars.zone_id }} \
+          --query "ResourceRecordSets[?Name=='{{ vars.record }}'].ResourceRecords[0].Value" --output json
+
+  terminate:
+    desc: terminate the task
+    mirage:
+      /api/terminate:
+        post:
+          headers:
+            Host: "{{ vars.host }}"
+          body:
+            application/json:
+              subdomain: "{{ vars.subdomain }}"
+    test: |
+      current.res.status == 200
+      && current.res.body.result == "ok"
+
+  terminated:
+    desc: the task disappears from the list
+    loop:
+      count: 30
+      interval: 1
+      until: |
+        current.res.status == 200
+        && len(current.res.body.result) == 0
+    mirage:
+      /api/list:
+        get:
+          headers:
+            Host: "{{ vars.host }}"
+
+  delete_record:
+    desc: delete the record of the task to make this runbook rerunnable
+    exec:
+      command: |
+        aws route53 change-resource-record-sets --hosted-zone-id {{ vars.zone_id }} --change-batch '{
+          "Changes": [{
+            "Action": "DELETE",
+            "ResourceRecordSet": {
+              "Name": "{{ vars.record }}", "Type": "A", "TTL": 60,
+              "ResourceRecords": [{"Value": "{{ steps.running.res.body.result[0].ipaddress }}"}]
+            }
+          }]
+        }'
+    test: current.exit_code == 0

@@ -739,6 +739,27 @@ If your account do not enable these settings yet, you must enable that.
 $ aws ecs put-account-setting-default --name taskLongArnFormat --value enabled
 ```
 
+## Development
+
+### Tests
+
+```console
+$ make test
+```
+
+### End-to-end test
+
+`make e2e` runs an end-to-end test against [AWS Emulator](https://github.com/aws/aws-emulator). It creates AWS resources on the emulator, starts mirage-ecs, and runs the scenario in [test/e2e.yml](test/e2e.yml) (launch, list, logs, mirage link, terminate) through the API.
+
+This requires the AWS CLI and [runn](https://github.com/k1LoW/runn). Start the emulator before running the test.
+
+```console
+$ aws-emulator --auth off &
+$ make e2e
+```
+
+The test always uses the emulator endpoint (`https://127.0.0.1:9297` by default) with dummy credentials. It never runs against real AWS.
+
 License
 --------
 

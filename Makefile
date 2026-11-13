@@ -23,5 +23,8 @@ push-image: docker-image
 test:
 	go test -v ./...
 
+e2e: mirage-ecs
+	./test/e2e/run.sh
+
 install:
 	go install github.com/acidlemon/mirage-ecs/v2/cmd/mirage-ecs

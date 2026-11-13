@@ -1,0 +1,17 @@
+[
+  {
+    "name": "app",
+    "image": "nginx:latest",
+    "essential": true,
+    "command": ["sh", "-c", "echo \"hello from $SUBDOMAIN on $GIT_BRANCH\"; sleep 3600"],
+    "portMappings": [{ "containerPort": 80 }],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/mirage-e2e",
+        "awslogs-region": "ap-northeast-1",
+        "awslogs-stream-prefix": "app"
+      }
+    }
+  }
+]
