@@ -45,6 +45,7 @@ Requirements:
   - `logs:GetLogEvents`
   - `route53:GetHostedZone` (optional for mirage link)
   - `route53:ChangeResourceRecordSets` (optional for mirage link)
+  - `route53:ListResourceRecordSets` (optional for mirage link)
   - `s3:GetObject` (optional for loading config/html files from S3)
   - `s3:ListBucket` (optional for loading html files from S3)
 

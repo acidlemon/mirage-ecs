@@ -35,6 +35,7 @@ resource "aws_iam_policy" "mirage-ecs" {
           "logs:GetLogEvents",
           "route53:GetHostedZone",
           "route53:ChangeResourceRecordSets",
+          "route53:ListResourceRecordSets",
         ]
         Effect   = "Allow"
         Resource = "*"
