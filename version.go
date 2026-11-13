@@ -1,3 +1,3 @@
 package mirageecs
 
-var Version = "v2.2.5"
+var Version = "v2.3.0"
