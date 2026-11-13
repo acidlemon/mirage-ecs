@@ -3,7 +3,7 @@ DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 export GO111MODULE := on
 
 mirage-ecs: *.go cmd/mirage-ecs/*.go go.mod go.sum
-	CGO_ENABLED=0 go build -ldflags "-X main.Version=$(GIT_VER) -X main.buildDate=$(DATE)" -o mirage-ecs ./cmd/mirage-ecs/main.go
+	CGO_ENABLED=0 go build -ldflags "-X main.buildDate=$(DATE)" -o mirage-ecs ./cmd/mirage-ecs/main.go
 
 clean:
 	rm -rf dist/* mirage-ecs

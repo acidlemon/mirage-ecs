@@ -14,10 +14,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	Version   string
-	buildDate string
-)
+var buildDate string
 
 func main() {
 	confFile := flag.String("conf", "", "specify config file or S3 URL")
@@ -39,7 +36,7 @@ func main() {
 	mirageecs.SetLogLevel(logLevel)
 
 	if showVersion {
-		fmt.Printf("mirage-ecs %s (%s)\n", Version, buildDate)
+		fmt.Printf("mirage-ecs %s (%s)\n", mirageecs.Version, buildDate)
 		return
 	}
 
@@ -62,7 +59,6 @@ func main() {
 		yaml.NewEncoder(os.Stdout).Encode(cfg)
 		return
 	}
-	mirageecs.Version = Version
 	app := mirageecs.New(ctx, cfg)
 	if err := app.Run(ctx); err != nil {
 		slog.Error(err.Error())

@@ -1,0 +1,52 @@
+name: tagpr and release
+on:
+  push:
+    branches: ["v2"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag"
+        required: false
+        type: string
+
+permissions:
+  pull-requests: write
+  packages: write
+  contents: write
+  actions: write
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: Songmu/tagpr@047aec4b6c0ce166f52958b5a97f5a3d927fd65b # v1.22.0
+        id: tagpr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name != 'workflow_dispatch' }} # skip on workflow_dispatch
+      # after tagpr adds a release tag, or workflow_dispatch, release it
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+        if: ${{ steps.tagpr.outputs.tag != '' || github.event_name == 'workflow_dispatch' }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ steps.tagpr.outputs.tag != '' || github.event_name == 'workflow_dispatch' }}
+      - name: Release Image
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          make push-image ${RELEASE_TAG:+GIT_VER="$RELEASE_TAG"}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.tagpr.outputs.tag || inputs.tag }}
+        if: ${{ steps.tagpr.outputs.tag != '' || github.event_name == 'workflow_dispatch' }}
